@@ -105,8 +105,6 @@ pub fn tokenize(source: &str) -> Program {
                 }
             }
 
-            println!("Created token digit with str: {} {}", current_char_token, digit_str);
-
             new_token.token_type = TokenType::NumericToken;
             new_token.value = digit_str;
         } else if current_char_token.is_ascii_alphabetic() {
