@@ -129,7 +129,7 @@ impl Token {
     }
 
     pub fn is_expression_end(&self) -> bool {
-        matches!(self, Token::EndExpressionToken(_))
+        matches!(self, Token::EndExpressionToken(_) | Token::ScopeEndToken(_))
     }
 }
 
@@ -344,7 +344,11 @@ impl Program {
                         }
                     } else {
                         match expr.eval(&mut self.scopes) {
-                            Ok(value) => println!("{}", value),
+                            Ok(value) => {
+                                if expr.evaluate_print() {
+                                    println!("{}", value)
+                                }
+                            },
                             Err(err) => return Err(err),
                         };
                     };
@@ -397,6 +401,7 @@ impl Program {
                 
                 Expression::If(Box::new(condition), Box::new(then_body), else_body)
             },
+            Token::ScopeBeginToken(_) => Expression::Block(vec![]),
             Token::BoolToken(val) => Expression::Atom(val),
             Token::StringToken(val) => Expression::Atom(val),
             Token::IdentifierToken(var_name) => Expression::Atom(var_name),

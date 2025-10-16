@@ -3,6 +3,7 @@ pub enum DataType {
     Float(f32),
     Bool(bool),
     String(String),
+    EndOfBlock,
 }
 
 #[derive(PartialEq)]
@@ -18,6 +19,7 @@ impl DataType {
             DataType::Float(val) => *val,
             DataType::Bool(b) => if *b { 1.0 } else { 0.0 },
             DataType::String(str) => str.parse::<f32>().unwrap_or(0.0),
+            DataType::EndOfBlock => panic!("Cannot evaluate eof as bool"),
         }
     }
 
@@ -31,7 +33,8 @@ impl DataType {
                 }
 
                 false
-            }
+            },
+            DataType::EndOfBlock => panic!("Cannot evaluate eof as bool"),
         }
     }
 
@@ -40,6 +43,7 @@ impl DataType {
             DataType::Float(_) => DataTypeType::Float,
             DataType::Bool(_) => DataTypeType::Bool,
             DataType::String(_) => DataTypeType::String,
+            DataType::EndOfBlock => panic!("Cannot get type of eof"),
         }
     }
 
@@ -48,6 +52,7 @@ impl DataType {
             DataType::String(str) => format!("{}", str),
             DataType::Float(val) => format!("{}", val),
             DataType::Bool(b) => format!("{}", b),
+            DataType::EndOfBlock => panic!("Cannot evaluate eof as bool"),
         }
     }
 
@@ -62,6 +67,7 @@ impl std::fmt::Display for DataType {
             DataType::Float(val) => write!(f, "{}", val),
             DataType::Bool(b) => write!(f, "{}", b),
             DataType::String(str) => write!(f, "{}", str),
+            DataType::EndOfBlock => Ok(()),
         }
     }
 }

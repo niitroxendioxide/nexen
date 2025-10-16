@@ -1,8 +1,14 @@
-let myvar = 1;
-let mystr = "him: Hello" + " World!";
+let licha =  "chimi";
+licha;
 
-if myvar == 1 {
-    let my_new_var = mystr + " me: Bye bye";
+{
+    {
+        {
+            let licha2 = "chimi2";
+            licha2;
+        } ;;;;;;;;;;;;;;;;;;;
+    } ;;;;; if 10 > 5 { 9; };;;;;;;
 
-    my_new_var;
+    let licha3 = "chimi3"; 
+    licha3;
 }

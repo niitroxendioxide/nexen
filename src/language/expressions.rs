@@ -60,6 +60,18 @@ impl Expression {
         }
     }
 
+    pub fn is_block(&self) -> bool {
+        matches!(self, Expression::Block(_))
+    }
+
+    pub fn is_conditional(&self) -> bool {
+        matches!(self, Expression::If(..))
+    }
+
+    pub fn evaluate_print(&self) -> bool {
+        !self.is_block() //&& !self.is_conditional()
+    }
+
     pub fn eval(&self, scopes: &mut ScopeStack) -> Result<DataType, LangError> {
         match self {
             Expression::Declaration(decl) => return Err(
@@ -120,8 +132,16 @@ impl Expression {
                                 "/" => return Ok(DataType::Float(lhs.as_float() / rhs.as_float())),
                                 "=" => return Ok(lhs),
                                 "==" => Ok(DataType::Bool(lhs.as_float() == rhs.as_float())),
+                                ">" => {
+                                    if lhs.get_type() == DataTypeType::Float && rhs.get_type() == DataTypeType::Float {
+                                        return Ok(DataType::Bool(lhs.as_float() > rhs.as_float()));
+                                    }
+
+                                    return Err(
+                                        LangError::new(format!("Cannot compare: \x1b[1;32m\"{} > {}\"\x1b[0m", lhs, rhs))
+                                    )
+                                },
                                 /*"!=" => if lhs != rhs { 1.0 } else { 0.0 },
-                                ">" => if lhs > rhs { 1.0 } else { 0.0 },
                                 "<" => if lhs < rhs { 1.0 } else { 0.0 },
                                 ">=" => if lhs >= rhs { 1.0 } else { 0.0 },
                                 "<=" => if lhs <= rhs { 1.0 } else { 0.0 },
@@ -154,7 +174,7 @@ impl Expression {
             Expression::Block(expressions) => {
                 scopes.push_scope();
                 
-                let mut result = DataType::Float(0.0);
+                let mut result = DataType::EndOfBlock;
                 for expr in expressions {
                     if let Some((var_name, expr_tree, is_declaration)) = expr.is_assign() {
                         let value = expr_tree.eval(scopes)?;
