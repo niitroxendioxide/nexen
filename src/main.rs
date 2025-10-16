@@ -7,7 +7,7 @@ fn main() {
     // Check if the argument exists and access it
     if args.len() > 1 {
         let first_arg = &args[1];
-        language::tokens::interpret(first_arg);
+        language::tokens::interpret(first_arg.to_string());
     } else {
         println!("No argument was provided.");
     }
