@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use crate::language::datatypes::{DataType};
+use crate::language::{datatypes::DataType, errors::LangError};
 
 pub enum Expression {
     Atom(String),
@@ -61,63 +61,77 @@ impl Expression {
         }
     }
 
-    pub fn eval(&self, variables: &HashMap<String, DataType>) -> DataType {
+    pub fn eval(&self, variables: &HashMap<String, DataType>) -> Result<DataType, LangError> {
         match self {
             Expression::Declaration(_) => panic!("Cannot evaluate a declaration"),
             Expression::Atom(val) => {
                 if val == "true" {
-                    return DataType::Bool(true);
+                    return Ok(DataType::Bool(true));
                 }
                 if val == "false" {
-                    return DataType::Bool(false);
+                    return Ok(DataType::Bool(false));
                 }
 
                 if let Ok(num) = val.parse::<f32>() {
-                    return DataType::Float(num);
+                    return Ok(DataType::Float(num));
                 }
 
                 if variables.contains_key(val) {
-                    return variables[val];
+                    return Ok(variables[val]);
                 }
 
-                panic!("Invalid atom evaluation: {}", val);
+                return Err(
+                    LangError::new(format!("Unknown reference to \x1b[1;32m\"{}\"\x1b[0m", val))
+                )
             },
             Expression::Operation(op, tree) => {
-                let lhs = tree.first().unwrap().eval(variables);
-                let rhs = tree.last().unwrap().eval(variables);
-
-                match op.as_str() {
-                    "+" => return DataType::Float(lhs.as_float() + rhs.as_float()),
-                    "-" => return DataType::Float(lhs.as_float() - rhs.as_float()),
-                    "*" => return DataType::Float(lhs.as_float() * rhs.as_float()),
-                    "/" => return DataType::Float(lhs.as_float() / rhs.as_float()),
-                    "=" => return lhs,
-                    "==" => DataType::Bool(lhs.as_float() == rhs.as_float()),
-                    /*"!=" => if lhs != rhs { 1.0 } else { 0.0 },
-                    ">" => if lhs > rhs { 1.0 } else { 0.0 },
-                    "<" => if lhs < rhs { 1.0 } else { 0.0 },
-                    ">=" => if lhs >= rhs { 1.0 } else { 0.0 },
-                    "<=" => if lhs <= rhs { 1.0 } else { 0.0 },
-                    "&&" => if lhs != 0.0 && rhs != 0.0 { 1.0 } else { 0.0 },
-                    "||" => if lhs != 0.0 || rhs != 0.0 { 1.0 } else { 0.0 }, */
-                    _ => panic!("Unsupported operator: {}, lhs: {}, rhs: {}", op, lhs, rhs),
+                match tree.first().unwrap().eval(variables) {
+                    Ok(lhs) => match tree.last().unwrap().eval(variables) {
+                        Ok(rhs) => {
+                            match op.as_str() {
+                                "+" => return Ok(DataType::Float(lhs.as_float() + rhs.as_float())),
+                                "-" => return Ok(DataType::Float(lhs.as_float() - rhs.as_float())),
+                                "*" => return Ok(DataType::Float(lhs.as_float() * rhs.as_float())),
+                                "/" => return Ok(DataType::Float(lhs.as_float() / rhs.as_float())),
+                                "=" => return Ok(lhs),
+                                "==" => Ok(DataType::Bool(lhs.as_float() == rhs.as_float())),
+                                /*"!=" => if lhs != rhs { 1.0 } else { 0.0 },
+                                ">" => if lhs > rhs { 1.0 } else { 0.0 },
+                                "<" => if lhs < rhs { 1.0 } else { 0.0 },
+                                ">=" => if lhs >= rhs { 1.0 } else { 0.0 },
+                                "<=" => if lhs <= rhs { 1.0 } else { 0.0 },
+                                "&&" => if lhs != 0.0 && rhs != 0.0 { 1.0 } else { 0.0 },
+                                "||" => if lhs != 0.0 || rhs != 0.0 { 1.0 } else { 0.0 }, */
+                                _ => return Err(
+                                    LangError::new(format!("Unsupported operator: {}, lhs: {}, rhs: {}", op, lhs, rhs))
+                                ),
+                            }
+                        },
+                        Err(err) => return Err(err),
+                    },
+                    Err(err) => return Err(err),
                 }
             },
             Expression::If(condition, then_body, else_body) => {
-                if condition.eval(variables).is_truthy() {
-                    then_body.eval(variables)
-                } else if let Some(else_expr) = else_body {
-                    else_expr.eval(variables)
-                } else {
-                    DataType::Float(0.0)
+                match condition.eval(variables) {
+                    Ok(cond) => {
+                        if cond.is_truthy() {
+                            then_body.eval(variables)
+                        } else if let Some(else_expr) = else_body {
+                            else_expr.eval(variables)
+                        } else {
+                            Ok(DataType::Float(0.0))
+                        }
+                    },
+                    Err(err) => return Err(err),
                 }
             },
             Expression::Block(expressions) => {
                 let mut result = DataType::Float(0.0);
                 for expr in expressions {
-                    result = expr.eval(variables);
+                    result = expr.eval(variables).unwrap();
                 }
-                result
+                Ok(result)
             }
         }
     }

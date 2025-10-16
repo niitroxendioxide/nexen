@@ -13,7 +13,7 @@ impl LangError {
 
 impl fmt::Display for LangError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "\x1b[0;31m[Error]\x1b[0m: {}", self.message)
+        write!(f, "\x1b[1;31m[Error]:\x1b[0m {}", self.message)
     }
 }
 

@@ -1,0 +1,7 @@
+let pedrete = true;
+let miamigo = 15;
+
+local comparison = pedrete == true;
+if (comparison) {
+    miamigo;
+}

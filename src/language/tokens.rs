@@ -182,6 +182,7 @@ impl Program {
             "public" => Token::PublicToken(token_str.to_string()),
             "private" => Token::PrivateToken(token_str.to_string()),
             "protected" => Token::ProtectedToken(token_str.to_string()),
+            "be" => Token::EqualToken(token_str.to_string()),
             "true" | "false" => Token::BoolToken(token_str.to_string()),
             _ => Token::IdentifierToken(token_str.to_string()),
         }
@@ -301,20 +302,28 @@ impl Program {
             match self.parse_expression(0.0) {
                 Ok(expr) => {
                     if let Some((var_name, expr_tree, is_declaration)) = expr.is_assign() {
-                        let value = expr_tree.eval(&self.variables);
+                        let wrapped = expr_tree.eval(&self.variables);
                         
-                        if is_declaration {
-                            self.set_variable(&var_name, value);
-                        } else {
-                            if !self.variables.contains_key(&var_name) {
-                                let err_msg = format!("Variable '{}' is not declared in this scope.", var_name);
-                                return Err(LangError::new(err_msg));
-                            }
-                            self.set_variable(&var_name, value);
+                        match wrapped {
+                            Ok(value) => {
+                                if is_declaration {
+                                    self.set_variable(&var_name, value);
+                                } else {
+                                    if !self.variables.contains_key(&var_name) {
+                                        let err_msg = format!("Variable \x1b[1;33m\"{}\"\x1b[0m is not declared in this scope.", var_name);
+                                        return Err(LangError::new(err_msg));
+                                    }
+                                    self.set_variable(&var_name, value);
+                                }
+                            },
+
+                            Err(err) => return Err(err)
                         }
                     } else {
-                        let res = expr.eval(&self.variables);
-                        println!("{}", res);
+                        match expr.eval(&self.variables) {
+                            Ok(value) => println!("{}", value),
+                            Err(err) => return Err(err),
+                        };
                     };
                 },
                 Err(err) => return Err(err),
@@ -377,7 +386,9 @@ impl Program {
                 assert_eq!(self.next(), Token::CloseParenthesisToken(")".to_string()));
                 last_expr.unwrap()
             },
-            t => panic!("Invalid token type: {:?}", t),
+            t => return Err(
+                LangError::new(format!("Unknown reference to \x1b[1;32m\"{:?}\"\x1b[0m", t))
+            ),
         };
 
         loop {

@@ -1,7 +1,0 @@
-katadevs = 2;
-let myfriend = 2;
-
-local result = katadevs == myfriend;
-if (result) {
-    67;
-}
