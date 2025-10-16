@@ -1,4 +1,7 @@
 use std::collections::HashMap;
+use crate::language::datatypes::{DataType};
+use crate::language::errors::LangError;
+use crate::language::expressions::*;
 
 static LINE_END_TOKEN: &str = ";";
 
@@ -11,52 +14,60 @@ pub enum SplitTokenType {
     EndExpressionToken,
 }
 
-#[derive(Clone, PartialEq)]
-pub enum TokenType {
+
+#[derive(Clone, PartialEq, Debug)]
+pub enum Token {
     // Arithmetic
-    OperationToken,
+    OperationToken(String),
 
     // Program creation
-    LetToken, // variable declaration
-    MutableToken, // make variable mutable
-    IdentifierToken, // variable name
-    EqualToken, // =
-    NamespaceAccessToken, // ::
-    ScopeBeginToken, // {
-    ScopeEndToken, // }
-    OpenParenthesisToken, // (
-    CloseParenthesisToken, // )
-    EndExpressionToken, // ;
+    LetToken(String), // variable declaration
+    MutableToken(String), // make variable mutable
+    IdentifierToken(String), // variable name
+    ScopeBeginToken(String), // {
+    ScopeEndToken(String), // }
+    OpenParenthesisToken(String), // (
+    CloseParenthesisToken(String), // )
+    EndExpressionToken(String), // ;
 
     // Types
-    BoolToken,
-    NumericToken,
-    StringToken,
-    NameToken,
+    BoolToken(String),
+    NumericToken(String),
+    StringToken(String),
 
     // Logic
-    IfToken,
-    ElseToken,
-    ReturnToken,
+    IfToken(String),
+    ElseToken(String),
+    ReturnToken(String),
+
+    EqualToken(String), // =
+    CompareToken(String),
+    NotEqualToken(String), // !=
+    GreaterToken(String), // >
+    LessToken(String), // <
+    GreaterEqualToken(String), // >=
+    LessEqualToken(String), // <=
+    AndToken(String), // &&
+    OrToken(String), // ||        
+    NamespaceAccessToken(String), // ::
 
     // Loops
-    WhileToken,
-    ForToken,
+    WhileToken(String),
+    ForToken(String),
 
     // Functions
-    FunctionToken,
-    PublicToken,
-    PrivateToken,
-    ProtectedToken,
+    FunctionToken(String),
+    PublicToken(String),
+    PrivateToken(String),
+    ProtectedToken(String),
 
     // non-registered
-    InvalidToken,
-    FinishLine,
-    SplitToken,
-}
-pub struct Token {
-    pub token_type: TokenType,
-    pub value: String,
+    InvalidToken(String),
+    FinishLine(String),
+    SplitToken(String),
+    
+    // other
+    EofToken,
 }
 
 #[derive(Clone)]
@@ -68,18 +79,22 @@ pub struct SplitToken {
 pub struct Program {
     pub source: String,
     pub tokens: Vec<Token>,
-    pub data: HashMap<String, Token>,
+    pub variables: HashMap<String, DataType>,
 }
 
 impl std::fmt::Display for Token {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self.token_type {
-            TokenType::OperationToken => write!(f, "\x1b[0;31mToken<\x1b[1;31mOperation, \'{}\'\x1b[0;31m>\x1b[0m", self.value),
-            TokenType::LetToken => write!(f, "\x1b[0;32mToken\x1b[1;32m<Decl, {}>\x1b[0m", self.value),
-            TokenType::NameToken => write!(f, "\x1b[0;33mToken\x1b[1;33m<Name, \"{}\">\x1b[0m", self.value),
-            TokenType::NumericToken => write!(f, "\x1b[0;33mToken\x1b[1;33m<Number, {}>\x1b[0m", self.value),
-            TokenType::EndExpressionToken => write!(f, "\x1b[0;34mToken\x1b[1;34m<EndExpression, {}>\x1b[0m", self.value),
-            _ => write!(f, "Token<{}>", self.value),
+        match self {
+            Token::OperationToken(val) => write!(f, "\x1b[0;31mToken<\x1b[1;31mOperator, \'{}\'\x1b[0;31m>\x1b[0m", val),
+            Token::LetToken(val) => write!(f, "\x1b[0;32mToken\x1b[1;32m<Decl, {}>\x1b[0m", val),
+            Token::IdentifierToken(val) => write!(f, "\x1b[0;33mToken\x1b[1;33m<Identifier, \"{}\">\x1b[0m", val),
+            Token::NumericToken(val) => write!(f, "\x1b[0;33mToken\x1b[1;33m<Number, {}>\x1b[0m", val),
+            Token::EndExpressionToken(val) => write!(f, "\x1b[0;34mToken\x1b[1;34m<EndExpression, {}>\x1b[0m", val),
+            Token::ScopeBeginToken(val) => write!(f, "\x1b[0;35mToken\x1b[1;35m<ScopeBegin, {}>\x1b[0m", val),
+            Token::ScopeEndToken(val) => write!(f, "\x1b[0;35mToken\x1b[1;35m<ScopeEnd, {}>\x1b[0m", val),
+            Token::FunctionToken(val) => write!(f, "\x1b[0;36mToken\x1b[1;36m<DeclFunction, {}>\x1b[0m", val),
+
+            val => write!(f, "\x1b[0;37mToken<Operator, {}>\x1b[0m", val),
         }
     }
 }
@@ -93,12 +108,36 @@ impl std::fmt::Display for Program {
     }
 }
 
+
+pub fn operator_binding_power(token: &str) -> (f32, f32) {
+    match token {
+        "=" => (0.1, 0.2),
+        "||" => (0.3, 0.4),
+        "&&" => (0.5, 0.6),
+        "==" | "!=" => (0.7, 0.8),
+        "<" | ">" | "<=" | ">=" => (0.9, 1.0),
+        "+" | "-" => (1.0, 1.1),
+        "*" | "/" => (2.0, 2.1),
+        _ => panic!("Invalid operator: {}", token),
+    }
+}
+
+impl Token {
+    pub fn is_declaration(&self) -> bool {
+        matches!(self, Token::LetToken(_))
+    }
+
+    pub fn is_expression_end(&self) -> bool {
+        matches!(self, Token::EndExpressionToken(_))
+    }
+}
+
 impl Program {
     pub fn new(source: String) -> Self {
         Program {
             source,
             tokens: vec![],
-            data: HashMap::new(),
+            variables: HashMap::new(),
         }
     }
 
@@ -111,11 +150,11 @@ impl Program {
                     token_type: SplitTokenType::NumToken,
                     value: token_char.to_string(),
                 },
-                'a'..='z' | 'A'..='Z' => SplitToken {
+                'a'..='z' | 'A'..='Z' | '_' => SplitToken {
                     token_type: SplitTokenType::CharToken,
                     value: token_char.to_string(),
                 },
-                ' ' | '\t' => SplitToken {
+                ' ' | '\t' | '\n' | '\r' => SplitToken {
                     token_type: SplitTokenType::SplitToken,
                     value: token_char.to_string(),
                 },
@@ -130,6 +169,22 @@ impl Program {
             }).collect();
 
         self.process_tokens(tokens);
+    }
+
+    fn process_name_token(&self, token_str: &str) -> Token {
+        match token_str {
+            "let" | "local" | "var" => Token::LetToken(token_str.to_string()),
+            "if" => Token::IfToken(token_str.to_string()),
+            "else" => Token::ElseToken(token_str.to_string()),
+            "while" => Token::WhileToken(token_str.to_string()),
+            "for" => Token::ForToken(token_str.to_string()),
+            "function" => Token::FunctionToken(token_str.to_string()),
+            "public" => Token::PublicToken(token_str.to_string()),
+            "private" => Token::PrivateToken(token_str.to_string()),
+            "protected" => Token::ProtectedToken(token_str.to_string()),
+            "true" | "false" => Token::BoolToken(token_str.to_string()),
+            _ => Token::IdentifierToken(token_str.to_string()),
+        }
     }
 
     fn process_tokens(&mut self, tokens: Vec<SplitToken>) {
@@ -149,7 +204,7 @@ impl Program {
                     let mut next_token_idx = cur_idx;
                     
                     while next_token_idx < tokens.len() {
-                        let next_token = &tokens[next_token_idx];
+                        let next_token: &SplitToken = &tokens[next_token_idx];
                         if (next_token.token_type != SplitTokenType::CharToken && next_token.token_type != SplitTokenType::NumToken) || next_token.value == " " {
                             break;
                         }
@@ -157,17 +212,9 @@ impl Program {
                         next_token_idx += 1;
                     }
                     
-                    let mut current_token_type = TokenType::NameToken;
-                    match base_str.to_string().as_str() {
-                        "let" => current_token_type = TokenType::LetToken,
-                        
-                        _ => {}
-                    }
+                    let current_token = self.process_name_token(&base_str);
 
-                    new_tokens.push(Token {
-                        token_type: current_token_type,
-                        value: base_str,
-                    });
+                    new_tokens.push(current_token);
                     
                     cur_idx = next_token_idx;    
                 },
@@ -184,49 +231,181 @@ impl Program {
                         next_token_idx += 1;
                     }
                     
-                    new_tokens.push(Token {
-                        token_type: TokenType::NumericToken,
-                        value: base_str,
-                    });
+                    new_tokens.push(Token::NumericToken(base_str));
                     
                     cur_idx = next_token_idx; 
                 },
+                SplitTokenType::OperationToken | SplitTokenType::EndExpressionToken => {
+                    let mut added_token = match current_token.value.as_str() {
+                        "{" => Token::ScopeBeginToken(current_token.value.clone()),
+                        "}" => Token::ScopeEndToken(current_token.value.clone()),
+                        "(" => Token::OpenParenthesisToken(current_token.value.clone()),
+                        ")" => Token::CloseParenthesisToken(current_token.value.clone()),
+                        ";" => Token::EndExpressionToken(current_token.value.clone()),
+                        _ => Token::OperationToken(current_token.value.clone()),
+                    };
 
-                // todo: add support for operations that involve mmutliple characters, i. e: !=, ==, etc.
-                _ => {    
-                    if current_token.token_type == SplitTokenType::EndExpressionToken {
-                        new_tokens.push(Token { 
-                            token_type: TokenType::EndExpressionToken,
-                            value: current_token.value.clone(),
-                        });
-                    } else {
-                        new_tokens.push(Token { 
-                            token_type: TokenType::OperationToken,
-                            value: current_token.value.clone(),
-                        });
+                    let mut base_str = String::new();
+                    base_str.push_str(&current_token.value);
+
+                    if cur_idx + 1 < tokens.len() {
+                        let next_token = &tokens[cur_idx + 1];
+
+                        if next_token.token_type == SplitTokenType::OperationToken && ( next_token.value == "=" || current_token.value == "=" ) {
+                            base_str.push_str(&next_token.value);
+                            cur_idx += 1;
+
+                            added_token = match base_str.as_str() {
+                                "==" => Token::CompareToken(base_str),
+                                "!=" => Token::NotEqualToken(base_str),
+                                ">=" => Token::GreaterEqualToken(base_str),
+                                "<=" => Token::LessEqualToken(base_str),
+                                _ => added_token,
+                            }
+                        }
                     }
 
+                    new_tokens.push(added_token);
+
+                    cur_idx += 1;
+                }
+                _ => {
                     cur_idx += 1;
                 }
             }
         }
 
+        new_tokens.reverse();
+
         self.tokens = new_tokens;
     }
     
-    pub fn align_to_hashmap(&mut self) {
+    pub fn next(&mut self) -> Token {
+        self.tokens.pop().unwrap_or(Token::EofToken)
+    }
 
+    pub fn peek(&mut self) -> Token {
+        self.tokens.last().cloned().unwrap_or(Token::EofToken)
+    }
+
+    pub fn begin(&mut self) -> Result<(), LangError> {
+        loop {
+            let next_token = self.peek();
+            if next_token == Token::EofToken {
+                break;
+            } else if next_token.is_expression_end() {
+                self.next();
+                continue;
+            }
+
+            match self.parse_expression(0.0) {
+                Ok(expr) => {
+                    if let Some((var_name, expr_tree, is_declaration)) = expr.is_assign() {
+                        let value = expr_tree.eval(&self.variables);
+                        
+                        if is_declaration {
+                            self.set_variable(&var_name, value);
+                        } else {
+                            if !self.variables.contains_key(&var_name) {
+                                let err_msg = format!("Variable '{}' is not declared in this scope.", var_name);
+                                return Err(LangError::new(err_msg));
+                            }
+                            self.set_variable(&var_name, value);
+                        }
+                    } else {
+                        let res = expr.eval(&self.variables);
+                        println!("{}", res);
+                    };
+                },
+                Err(err) => return Err(err),
+            }
+        }
+
+        Ok(())
+    }
+
+    pub fn set_variable(&mut self, var_name: &str, value: DataType) {
+        self.variables.insert(var_name.to_string(), value);
+    }
+
+    pub fn parse_block(&mut self) -> Expression {
+        let mut expressions = Vec::new();
+        
+        loop {
+            match self.peek() {
+                Token::ScopeEndToken(_) | Token::EofToken => break,
+                Token::EndExpressionToken(_) => {
+                    self.next();
+                    continue;
+                }
+                _ => {
+                    expressions.push(self.parse_expression(0.0).unwrap());
+                }
+            }
+        }
+        
+        Expression::Block(expressions)
+    }
+
+    pub fn parse_expression(&mut self, min_bp: f32) -> Result<Expression, LangError> {
+        let mut lvalue = match self.next() {
+            Token::EndExpressionToken(_) => {
+                return self.parse_expression(min_bp);
+            }
+            Token::LetToken(_) => {
+                match self.next() {
+                    Token::IdentifierToken(var_name) => Expression::Declaration(var_name),
+                    t => return Err(LangError::new(format!("Expected identifier after 'let', got: {:?}", t))),
+                }
+            },
+            Token::IfToken(_) => {
+                let condition = self.parse_expression(0.0).unwrap();
+                
+                assert_eq!(self.next(), Token::ScopeBeginToken("{".to_string()));
+                let then_body = self.parse_block();
+                assert_eq!(self.next(), Token::ScopeEndToken("}".to_string()));
+                
+                let else_body = Option::Some(Box::new(Expression::Block(vec![])));
+                
+                Expression::If(Box::new(condition), Box::new(then_body), else_body)
+            },
+            Token::BoolToken(val) => Expression::Atom(val),
+            Token::IdentifierToken(var_name) => Expression::Atom(var_name),
+            Token::NumericToken(var_name) => Expression::Atom(var_name),
+            Token::OpenParenthesisToken(_) => {
+                let last_expr = self.parse_expression(0.0);
+                assert_eq!(self.next(), Token::CloseParenthesisToken(")".to_string()));
+                last_expr.unwrap()
+            },
+            t => panic!("Invalid token type: {:?}", t),
+        };
+
+        loop {
+            let op = match self.peek() {
+                Token::EofToken | Token::EndExpressionToken(_) => break,
+                Token::CloseParenthesisToken(_) => break,
+                Token::OperationToken(opv) 
+                | Token::EqualToken(opv)
+                | Token::CompareToken(opv) => opv,
+                _ => break,
+            };
+
+            let (l_bp, r_bp) = operator_binding_power(&op);
+            if l_bp < min_bp {
+                break;
+            }
+
+            self.next();
+            match self.parse_expression(r_bp) {
+                Ok(rvalue) => lvalue = Expression::Operation(op, vec![lvalue, rvalue]),
+                Err(err) => return Err(err),
+            }
+        };
+
+        Ok(lvalue)
     }
 
     pub fn is_token_ending(token: &SplitToken) -> bool {
         token.value == LINE_END_TOKEN || token.value == " "
     }
-}
-
-
-pub fn interpret(source: String) {
-    let mut program = Program::new(source);
-    program.tokenize();
-
-    println!("{}", program);
 }

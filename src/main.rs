@@ -1,13 +1,21 @@
 use lang::language;
+use lang::files;
 use std::env;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
 
-    // Check if the argument exists and access it
     if args.len() > 1 {
-        let first_arg = &args[1];
-        language::tokens::interpret(first_arg.to_string());
+        let file_path = &args[1];
+
+        match files::file::validate_and_read_file(file_path) {
+            Ok(source) => {
+                if let Err(err) = language::interpret(source) {
+                    println!("Error when executing .nx file: \n{}", err)
+                }
+            },
+            Err(err) => println!("{}", err),
+        }
     } else {
         println!("No argument was provided.");
     }
