@@ -1,14 +1,5 @@
-let licha =  "chimi";
-licha;
-
-{
-    {
-        {
-            let licha2 = "chimi2";
-            licha2;
-        } ;;;;;;;;;;;;;;;;;;;
-    } ;;;;; if 10 > 5 { 9; };;;;;;;
-
-    let licha3 = "chimi3"; 
-    licha3;
+function print(x) {
+    x;
 }
+
+print("Hello world!");

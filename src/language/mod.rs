@@ -9,3 +9,10 @@ pub fn interpret(source: String) -> Result<(), errors::LangError> {
     program.tokenize();
     program.begin()
 }
+
+pub fn tokenize(source: String) -> Result<(), errors::LangError> {
+    let mut program = tokens::Program::new(source);
+    program.tokenize();
+    println!("{}", program);
+    Ok(())
+}

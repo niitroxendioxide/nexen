@@ -4,7 +4,7 @@ use crate::language::scopes::ScopeStack;
 
 static LINE_END_TOKEN: &str = ";";
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 pub enum SplitTokenType {
     CharToken,
     NumToken,
@@ -94,15 +94,17 @@ impl std::fmt::Display for Token {
             Token::ScopeEndToken(val) => write!(f, "\x1b[0;35mToken\x1b[1;35m<ScopeEnd, {}>\x1b[0m", val),
             Token::FunctionToken(val) => write!(f, "\x1b[0;31mToken\x1b[1;31m<DeclFunction, {}>\x1b[0m", val),
             Token::StringToken(val) => write!(f, "\x1b[0;32mToken\x1b[1;32m<String, {}>\x1b[0m", val),
+            Token::ReturnToken(val) => write!(f, "\x1b[0;31mToken\x1b[1;31m<ReturnVal, {}>\x1b[0m", val),
 
-            val => write!(f, "\x1b[0;37mToken<Operator, {}>\x1b[0m", val),
+
+            t => write!(f, "{:?}", t),
         }
     }
 }
 
 impl std::fmt::Display for Program {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        for token in self.tokens.iter() {
+        for token in self.tokens.iter().rev() {
             write!(f, "{}\n", token)?;
         }
         Ok(())
@@ -119,9 +121,97 @@ pub fn operator_binding_power(token: &str) -> (f32, f32) {
         "<" | ">" | "<=" | ">=" => (0.9, 1.0),
         "+" | "-" => (1.0, 1.1),
         "*" | "/" => (2.0, 2.1),
+        "." | "[" => (4.0, 4.1),
         _ => panic!("Invalid operator: {}", token),
     }
 }
+
+fn parse_function_signature(signature: &str) -> Result<(String, Vec<String>), LangError> {
+    // Parse "name(param1,param2)" into ("name", ["param1", "param2"])
+    if let Some(paren_pos) = signature.find('(') {
+        let fn_name = signature[..paren_pos].to_string();
+        let params_str = &signature[paren_pos+1..signature.len()-1]; // Remove ( and )
+        
+        let params: Vec<String> = if params_str.is_empty() {
+            vec![]
+        } else {
+            params_str.split(',')
+                .map(|s| s.trim().to_string())
+                .collect()
+        };
+        
+        Ok((fn_name, params))
+    } else {
+        Err(LangError::new(format!("Invalid function signature: {}", signature)))
+    }
+}
+
+fn is_function_call(identifier: &str) -> bool {
+    identifier.contains('(') && identifier.ends_with(')')
+}
+
+fn parse_function_call_with_program(call_str: &str) -> Result<(String, Vec<Expression>), LangError> {
+    if let Some(paren_pos) = call_str.find('(') {
+        let fn_name = call_str[..paren_pos].to_string();
+        let args_str = &call_str[paren_pos+1..call_str.len()-1]; // Remove ( and )
+        
+        if args_str.is_empty() {
+            return Ok((fn_name, vec![]));
+        }
+        
+        let arg_strings = split_arguments(args_str);
+        
+        let mut arg_expressions = Vec::new();
+        for arg_str in arg_strings {
+            let mut mini_program = Program::new(arg_str.trim().to_string());
+            mini_program.tokenize();
+            let expr = mini_program.parse_expression(0.0)?;
+            arg_expressions.push(expr);
+        }
+        
+        Ok((fn_name, arg_expressions))
+    } else {
+        Err(LangError::new(format!("Invalid function call: {}", call_str)))
+    }
+}
+
+fn split_arguments(args_str: &str) -> Vec<String> {
+    let mut args = Vec::new();
+    let mut current_arg = String::new();
+    let mut paren_depth = 0;
+    let mut in_string = false;
+    
+    for ch in args_str.chars() {
+        match ch {
+            '"' => {
+                in_string = !in_string;
+                current_arg.push(ch);
+            }
+            '(' if !in_string => {
+                paren_depth += 1;
+                current_arg.push(ch);
+            }
+            ')' if !in_string => {
+                paren_depth -= 1;
+                current_arg.push(ch);
+            }
+            ',' if !in_string && paren_depth == 0 => {
+                args.push(current_arg.trim().to_string());
+                current_arg.clear();
+            }
+            _ => {
+                current_arg.push(ch);
+            }
+        }
+    }
+    
+    if !current_arg.is_empty() {
+        args.push(current_arg.trim().to_string());
+    }
+    
+    args
+}
+
 
 impl Token {
     pub fn is_declaration(&self) -> bool {
@@ -151,7 +241,7 @@ impl Program {
                     token_type: SplitTokenType::NumToken,
                     value: token_char.to_string(),
                 },
-                'a'..='z' | 'A'..='Z' | '_' => SplitToken {
+                'a'..='z' | 'A'..='Z' | '_' | ',' => SplitToken {
                     token_type: SplitTokenType::CharToken,
                     value: token_char.to_string(),
                 },
@@ -188,6 +278,7 @@ impl Program {
             "private" => Token::PrivateToken(token_str.to_string()),
             "protected" => Token::ProtectedToken(token_str.to_string()),
             "be" => Token::EqualToken(token_str.to_string()),
+            "return" => Token::ReturnToken(token_str.to_string()),
             "true" | "false" => Token::BoolToken(token_str.to_string()),
             _ => Token::IdentifierToken(token_str.to_string()),
         }
@@ -209,13 +300,27 @@ impl Program {
                     let mut base_str = String::new();
                     let mut next_token_idx = cur_idx;
                     
+                    let mut is_fn_def = false;
                     while next_token_idx < tokens.len() {
                         let next_token: &SplitToken = &tokens[next_token_idx];
-                        if (next_token.token_type != SplitTokenType::CharToken && next_token.token_type != SplitTokenType::NumToken) || next_token.value == " " {
+                        
+                        if next_token.value == "(" {
+                            is_fn_def = true;
+                        }
+
+                        if !is_fn_def && (next_token.token_type == SplitTokenType::SplitToken 
+                                || next_token.token_type == SplitTokenType::EndExpressionToken
+                                || next_token.token_type == SplitTokenType::OperationToken) {
                             break;
                         }
+
                         base_str.push_str(&next_token.value);
                         next_token_idx += 1;
+
+                        if is_fn_def && next_token.token_type == SplitTokenType::OperationToken
+                            && next_token.value == ")" { 
+                            break;
+                        }
                     }
                     
                     let current_token = self.process_name_token(&base_str);
@@ -328,7 +433,9 @@ impl Program {
 
             match self.parse_expression(0.0) {
                 Ok(expr) => {
-                    if let Some((var_name, expr_tree, is_declaration)) = expr.is_assign() {
+                    if let Expression::FunctionDeclaration(fn_name, params, body) = expr {
+                        self.scopes.define_function(fn_name, params, body);
+                    } else if let Some((var_name, expr_tree, is_declaration)) = expr.is_assign() {
                         let wrapped = expr_tree.eval(&mut self.scopes);
                         
                         match wrapped {
@@ -390,6 +497,20 @@ impl Program {
                     t => return Err(LangError::new(format!("Expected identifier after 'let', got: {:?}", t))),
                 }
             },
+            Token::FunctionToken(_) => {
+                match self.next() {
+                    Token::IdentifierToken(fn_signature) => {
+                        let (fn_name, params) = parse_function_signature(&fn_signature)?;
+                        
+                        assert_eq!(self.next(), Token::ScopeBeginToken("{".to_string()));
+                        let body = self.parse_block();
+                        assert_eq!(self.next(), Token::ScopeEndToken("}".to_string()));
+                        
+                        Expression::FunctionDeclaration(fn_name, params, Box::new(body))
+                    }
+                    t => return Err(LangError::new(format!("Expected function signature after 'function', got: {:?}", t))),
+                }
+            },
             Token::IfToken(_) => {
                 let condition = self.parse_expression(0.0).unwrap();
                 
@@ -404,7 +525,14 @@ impl Program {
             Token::ScopeBeginToken(_) => Expression::Block(vec![]),
             Token::BoolToken(val) => Expression::Atom(val),
             Token::StringToken(val) => Expression::Atom(val),
-            Token::IdentifierToken(var_name) => Expression::Atom(var_name),
+            Token::IdentifierToken(var_name) => {
+                if is_function_call(&var_name) {
+                    let (fn_name, arg_expressions) = parse_function_call_with_program(&var_name)?;
+                    Expression::FunctionCall(fn_name, Box::new(arg_expressions))
+                } else {
+                    Expression::Atom(var_name)
+                }
+            },
             Token::NumericToken(var_name) => Expression::Atom(var_name),
             Token::OpenParenthesisToken(_) => {
                 let last_expr = self.parse_expression(0.0);

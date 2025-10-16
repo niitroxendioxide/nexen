@@ -1,9 +1,16 @@
 use crate::language::{datatypes::{DataType, DataTypeType}, errors::LangError, scopes::ScopeStack};
 
+#[derive(Clone, Debug, PartialEq)]
 pub enum Expression {
     Atom(String),
     Operation(String, Vec<Expression>),
     Declaration(String),
+
+    // fn
+    FunctionCall(String, Box<Vec<Expression>>),
+    FunctionDeclaration(String, Vec<String>, Box<Expression>),
+    
+    // conditionals
     If(Box<Expression>, Box<Expression>, Option<Box<Expression>>), 
     Block(Vec<Expression>),
 }
@@ -11,6 +18,18 @@ pub enum Expression {
 impl std::fmt::Display for Expression {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Expression::FunctionDeclaration(name, params, body) => {
+                let mut param_str = String::new();
+                for param in params {
+                    param_str.push_str(&format!("{}, ", param));
+                }
+
+                write!(f, "fn<{}({})> {{ {} }}", name, param_str, body)
+            },
+            Expression::FunctionCall(fn_name, _) => {
+
+                write!(f, "fn_call<{}>", fn_name)
+            },
             Expression::Declaration(val) => write!(f, "decl<{}>", val),
             Expression::Atom(val) => write!(f, "{}", val),
             Expression::Operation(op, tree) => {
@@ -74,7 +93,52 @@ impl Expression {
 
     pub fn eval(&self, scopes: &mut ScopeStack) -> Result<DataType, LangError> {
         match self {
-            Expression::Declaration(decl) => return Err(
+            Expression::FunctionCall(fn_name, args) => {
+                let mut arg_values = Vec::new();
+                for arg in args.iter() {
+                    match arg.eval(scopes) {
+                        Ok(val) => arg_values.push(val),
+                        Err(err) => return Err(err),
+                    }
+                }
+
+                // Get and clone the function data to avoid borrow conflicts
+                let (params, body) = match scopes.get(&fn_name) {
+                    Some(fn_data) => {
+                        match fn_data {
+                            DataType::Function(params, body) => {
+                                if params.len() != args.len() {
+                                    return Err(LangError::new(format!(
+                                        "Function '{}' expects {} arguments, got {}",
+                                        fn_name, params.len(), args.len()
+                                    )));
+                                }
+                                // Clone to avoid borrow conflicts
+                                (params.clone(), body.clone())
+                            }
+                            _ => return Err(LangError::new(format!("'{}' is not a function", fn_name)))
+                        }
+                    },
+                    None => return Err(LangError::new(format!("Function '{}' is not defined", fn_name))),
+                };
+                
+                // Now we can mutably borrow scopes again
+                scopes.push_scope();
+                
+                // Bind parameters to argument values
+                for (param_name, arg_value) in params.iter().zip(arg_values.iter()) {
+                    scopes.declare(param_name.clone(), arg_value.clone());
+                }
+                
+                // Execute function body
+                let result = body.eval(scopes)?;
+                
+                // Pop function scope
+                scopes.pop_scope();
+                
+                Ok(result)
+            },
+            Expression::Declaration(decl) | Expression::FunctionDeclaration(decl, ..) => return Err(
                 LangError::new(format!("Cannot evaluate declaration: {}", decl))
             ),
             Expression::Atom(val) => {
@@ -94,19 +158,6 @@ impl Expression {
                 }
 
                 Ok(DataType::String(val.clone()))
-                /*
-                In case its something else(?)
-                if val.starts_with("\"") && val.ends_with("\"") {
-                    let mut cloned_str = val.clone();
-                    cloned_str.remove(0);
-                    cloned_str.remove(cloned_str.len()-1);
-
-                    return Ok(DataType::String(cloned_str));
-                } */
-
-                /*return Err(
-                    LangError::new(format!("Invalid evaluation of atom:  \x1b[1;32m\"{}\"\x1b[0m", val))
-                ) */
             },
             Expression::Operation(op, tree) => {
                 match tree.first().unwrap().eval(scopes) {
@@ -176,7 +227,9 @@ impl Expression {
                 
                 let mut result = DataType::EndOfBlock;
                 for expr in expressions {
-                    if let Some((var_name, expr_tree, is_declaration)) = expr.is_assign() {
+                    if let Expression::FunctionDeclaration(fn_name, params, body) = expr {
+                        scopes.define_function(fn_name.clone(), params.clone(), body.clone());
+                    } else if let Some((var_name, expr_tree, is_declaration)) = expr.is_assign() {
                         let value = expr_tree.eval(scopes)?;
                         
                         if is_declaration {

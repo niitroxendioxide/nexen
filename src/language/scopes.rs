@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use crate::language::{datatypes::DataType, errors::LangError};
+use crate::language::{datatypes::DataType, errors::LangError, expressions::Expression};
 
 #[derive(Clone)]
 pub struct Scope {
@@ -35,6 +35,10 @@ impl ScopeStack {
         }
     }
 
+    pub fn define_function(&mut self, fn_name: String, params: Vec<String>, body: Box<Expression>) {
+        self.scopes.last_mut().unwrap().variables.insert(fn_name, DataType::Function(params, (*body).clone()));
+    }
+
     pub fn declare(&mut self, var_name: String, value: DataType) {
         self.scopes.last_mut().unwrap().variables.insert(var_name, value);
     }
@@ -49,7 +53,7 @@ impl ScopeStack {
         Err(LangError::new(format!("Variable '{}' is not declared", var_name)))
     }
 
-    pub fn get(&self, var_name: &str) -> Option<&DataType> {
+    pub fn get(&mut self, var_name: &str) -> Option<&DataType> {
         for scope in self.scopes.iter().rev() {
             if scope.variables.contains_key(var_name) {
                 return Some(scope.variables.get(var_name).unwrap());
