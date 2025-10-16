@@ -1,7 +1,8 @@
-let pedrete = true;
-let miamigo = 15;
+let myvar = 1;
+let mystr = "him: Hello" + " World!";
 
-local comparison = pedrete == true;
-if (comparison) {
-    miamigo;
+if myvar == 1 {
+    let my_new_var = mystr + " me: Bye bye";
+
+    my_new_var;
 }

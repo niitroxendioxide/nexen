@@ -1,7 +1,15 @@
-#[derive(Clone, Debug, PartialEq, Copy)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum DataType {
     Float(f32),
     Bool(bool),
+    String(String),
+}
+
+#[derive(PartialEq)]
+pub enum DataTypeType {
+    Float,
+    Bool,
+    String,
 }
 
 impl DataType {
@@ -9,6 +17,7 @@ impl DataType {
         match self {
             DataType::Float(val) => *val,
             DataType::Bool(b) => if *b { 1.0 } else { 0.0 },
+            DataType::String(str) => str.parse::<f32>().unwrap_or(0.0),
         }
     }
 
@@ -16,6 +25,29 @@ impl DataType {
         match self {
             DataType::Bool(b) => *b,
             DataType::Float(val) => *val != 0.0,
+            DataType::String(str) => {
+                if str == &"true" {
+                    return true;
+                }
+
+                false
+            }
+        }
+    }
+
+    pub fn get_type(&self) -> DataTypeType {
+        match self {
+            DataType::Float(_) => DataTypeType::Float,
+            DataType::Bool(_) => DataTypeType::Bool,
+            DataType::String(_) => DataTypeType::String,
+        }
+    }
+
+    pub fn as_string(&self) -> String {
+        match self {
+            DataType::String(str) => format!("{}", str),
+            DataType::Float(val) => format!("{}", val),
+            DataType::Bool(b) => format!("{}", b),
         }
     }
 
@@ -29,6 +61,7 @@ impl std::fmt::Display for DataType {
         match self {
             DataType::Float(val) => write!(f, "{}", val),
             DataType::Bool(b) => write!(f, "{}", b),
+            DataType::String(str) => write!(f, "{}", str),
         }
     }
 }

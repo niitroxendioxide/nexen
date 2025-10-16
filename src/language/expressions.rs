@@ -1,5 +1,4 @@
-use std::collections::HashMap;
-use crate::language::{datatypes::DataType, errors::LangError};
+use crate::language::{datatypes::{DataType, DataTypeType}, errors::LangError, scopes::ScopeStack};
 
 pub enum Expression {
     Atom(String),
@@ -61,9 +60,11 @@ impl Expression {
         }
     }
 
-    pub fn eval(&self, variables: &HashMap<String, DataType>) -> Result<DataType, LangError> {
+    pub fn eval(&self, scopes: &mut ScopeStack) -> Result<DataType, LangError> {
         match self {
-            Expression::Declaration(_) => panic!("Cannot evaluate a declaration"),
+            Expression::Declaration(decl) => return Err(
+                LangError::new(format!("Cannot evaluate declaration: {}", decl))
+            ),
             Expression::Atom(val) => {
                 if val == "true" {
                     return Ok(DataType::Bool(true));
@@ -76,20 +77,44 @@ impl Expression {
                     return Ok(DataType::Float(num));
                 }
 
-                if variables.contains_key(val) {
-                    return Ok(variables[val]);
+                if let Some(value) = scopes.get(val) {
+                    return Ok(value.clone());
                 }
 
-                return Err(
-                    LangError::new(format!("Unknown reference to \x1b[1;32m\"{}\"\x1b[0m", val))
-                )
+                Ok(DataType::String(val.clone()))
+                /*
+                In case its something else(?)
+                if val.starts_with("\"") && val.ends_with("\"") {
+                    let mut cloned_str = val.clone();
+                    cloned_str.remove(0);
+                    cloned_str.remove(cloned_str.len()-1);
+
+                    return Ok(DataType::String(cloned_str));
+                } */
+
+                /*return Err(
+                    LangError::new(format!("Invalid evaluation of atom:  \x1b[1;32m\"{}\"\x1b[0m", val))
+                ) */
             },
             Expression::Operation(op, tree) => {
-                match tree.first().unwrap().eval(variables) {
-                    Ok(lhs) => match tree.last().unwrap().eval(variables) {
+                match tree.first().unwrap().eval(scopes) {
+                    Ok(lhs) => match tree.last().unwrap().eval(scopes) {
                         Ok(rhs) => {
                             match op.as_str() {
-                                "+" => return Ok(DataType::Float(lhs.as_float() + rhs.as_float())),
+                                "+" => {
+                                    if lhs.get_type() == DataTypeType::Float && rhs.get_type() == DataTypeType::Float {
+                                        return Ok(DataType::Float(lhs.as_float() + rhs.as_float()));
+                                    } else if lhs.get_type() == DataTypeType::String {
+                                        return Ok(DataType::String(lhs.as_string() + &rhs.as_string()));
+                                    }
+
+                                    let r_str = rhs.as_string();
+                                    let l_str = lhs.as_string();
+
+                                    Err(
+                                        LangError::new(format!("Invalid evaluation: \x1b[1;32m\"{} {} {}\"\x1b[0m", l_str, op, r_str))
+                                    )
+                                },
                                 "-" => return Ok(DataType::Float(lhs.as_float() - rhs.as_float())),
                                 "*" => return Ok(DataType::Float(lhs.as_float() * rhs.as_float())),
                                 "/" => return Ok(DataType::Float(lhs.as_float() / rhs.as_float())),
@@ -113,12 +138,12 @@ impl Expression {
                 }
             },
             Expression::If(condition, then_body, else_body) => {
-                match condition.eval(variables) {
+                match condition.eval(scopes) {
                     Ok(cond) => {
                         if cond.is_truthy() {
-                            then_body.eval(variables)
+                            then_body.eval(scopes)
                         } else if let Some(else_expr) = else_body {
-                            else_expr.eval(variables)
+                            else_expr.eval(scopes)
                         } else {
                             Ok(DataType::Float(0.0))
                         }
@@ -127,10 +152,32 @@ impl Expression {
                 }
             },
             Expression::Block(expressions) => {
+                scopes.push_scope();
+                
                 let mut result = DataType::Float(0.0);
                 for expr in expressions {
-                    result = expr.eval(variables).unwrap();
+                    if let Some((var_name, expr_tree, is_declaration)) = expr.is_assign() {
+                        let value = expr_tree.eval(scopes)?;
+                        
+                        if is_declaration {
+                            scopes.declare(var_name, value.clone());
+                            result = value;
+                        } else {
+                            scopes.set(&var_name, value.clone())?;
+                            result = value;
+                        }
+                    } else {
+                        match expr.eval(scopes) {
+                            Ok(val) => result = val,
+                            Err(err) => {
+                                scopes.pop_scope();
+                                return Err(err);
+                            }
+                        }
+                    }
                 }
+                
+                scopes.pop_scope();
                 Ok(result)
             }
         }

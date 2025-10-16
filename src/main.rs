@@ -11,7 +11,7 @@ fn main() {
         match files::file::validate_and_read_file(file_path) {
             Ok(source) => {
                 if let Err(err) = language::interpret(source) {
-                    println!("[NX-Interpreter] when executing .nx file: \n\n> {}", err)
+                    println!("[NX-Interpreter] when executing {}: \n\n> {}", file_path, err)
                 }
             },
             Err(err) => println!("{}", err),

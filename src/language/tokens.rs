@@ -1,7 +1,6 @@
-use std::collections::HashMap;
-use crate::language::datatypes::{DataType};
 use crate::language::errors::LangError;
 use crate::language::expressions::*;
+use crate::language::scopes::ScopeStack;
 
 static LINE_END_TOKEN: &str = ";";
 
@@ -9,6 +8,7 @@ static LINE_END_TOKEN: &str = ";";
 pub enum SplitTokenType {
     CharToken,
     NumToken,
+    StrToken,
     SplitToken,
     OperationToken,
     EndExpressionToken,
@@ -79,7 +79,7 @@ pub struct SplitToken {
 pub struct Program {
     pub source: String,
     pub tokens: Vec<Token>,
-    pub variables: HashMap<String, DataType>,
+    pub scopes: ScopeStack,
 }
 
 impl std::fmt::Display for Token {
@@ -92,7 +92,8 @@ impl std::fmt::Display for Token {
             Token::EndExpressionToken(val) => write!(f, "\x1b[0;34mToken\x1b[1;34m<EndExpression, {}>\x1b[0m", val),
             Token::ScopeBeginToken(val) => write!(f, "\x1b[0;35mToken\x1b[1;35m<ScopeBegin, {}>\x1b[0m", val),
             Token::ScopeEndToken(val) => write!(f, "\x1b[0;35mToken\x1b[1;35m<ScopeEnd, {}>\x1b[0m", val),
-            Token::FunctionToken(val) => write!(f, "\x1b[0;36mToken\x1b[1;36m<DeclFunction, {}>\x1b[0m", val),
+            Token::FunctionToken(val) => write!(f, "\x1b[0;31mToken\x1b[1;31m<DeclFunction, {}>\x1b[0m", val),
+            Token::StringToken(val) => write!(f, "\x1b[0;32mToken\x1b[1;32m<String, {}>\x1b[0m", val),
 
             val => write!(f, "\x1b[0;37mToken<Operator, {}>\x1b[0m", val),
         }
@@ -137,7 +138,7 @@ impl Program {
         Program {
             source,
             tokens: vec![],
-            variables: HashMap::new(),
+            scopes: ScopeStack::new(),
         }
     }
 
@@ -156,6 +157,10 @@ impl Program {
                 },
                 ' ' | '\t' | '\n' | '\r' => SplitToken {
                     token_type: SplitTokenType::SplitToken,
+                    value: token_char.to_string(),
+                },
+                '\"' => SplitToken {
+                    token_type: SplitTokenType::StrToken,
                     value: token_char.to_string(),
                 },
                 ';' => SplitToken {
@@ -218,6 +223,28 @@ impl Program {
                     new_tokens.push(current_token);
                     
                     cur_idx = next_token_idx;    
+                },
+                SplitTokenType::StrToken => {
+                    let mut base_str = String::new();
+                    let mut next_token_idx = cur_idx;
+                    
+                    while next_token_idx < tokens.len() {
+                        let next_token: &SplitToken = &tokens[next_token_idx];
+                        base_str.push_str(&next_token.value);
+                        next_token_idx+=1;
+
+                        if next_token.token_type == SplitTokenType::StrToken && next_token.value == "\"" && (next_token_idx-1) > cur_idx {
+                            break;
+                        }
+                    }
+
+                    base_str.remove(0); // initial "
+                    base_str.remove(base_str.len() - 1);
+
+                    let current_token = Token::StringToken(base_str);
+                    new_tokens.push(current_token);
+                    
+                    cur_idx = next_token_idx; 
                 },
                 SplitTokenType::NumToken => {
                     let mut base_str = String::new();
@@ -302,25 +329,21 @@ impl Program {
             match self.parse_expression(0.0) {
                 Ok(expr) => {
                     if let Some((var_name, expr_tree, is_declaration)) = expr.is_assign() {
-                        let wrapped = expr_tree.eval(&self.variables);
+                        let wrapped = expr_tree.eval(&mut self.scopes);
                         
                         match wrapped {
                             Ok(value) => {
                                 if is_declaration {
-                                    self.set_variable(&var_name, value);
-                                } else {
-                                    if !self.variables.contains_key(&var_name) {
-                                        let err_msg = format!("Variable \x1b[1;33m\"{}\"\x1b[0m is not declared in this scope.", var_name);
-                                        return Err(LangError::new(err_msg));
-                                    }
-                                    self.set_variable(&var_name, value);
+                                    self.scopes.declare(var_name, value);
+                                } else if let Err(err) = self.scopes.set(&var_name, value) {
+                                    return Err(err);
                                 }
                             },
 
                             Err(err) => return Err(err)
                         }
                     } else {
-                        match expr.eval(&self.variables) {
+                        match expr.eval(&mut self.scopes) {
                             Ok(value) => println!("{}", value),
                             Err(err) => return Err(err),
                         };
@@ -331,10 +354,6 @@ impl Program {
         }
 
         Ok(())
-    }
-
-    pub fn set_variable(&mut self, var_name: &str, value: DataType) {
-        self.variables.insert(var_name.to_string(), value);
     }
 
     pub fn parse_block(&mut self) -> Expression {
@@ -379,6 +398,7 @@ impl Program {
                 Expression::If(Box::new(condition), Box::new(then_body), else_body)
             },
             Token::BoolToken(val) => Expression::Atom(val),
+            Token::StringToken(val) => Expression::Atom(val),
             Token::IdentifierToken(var_name) => Expression::Atom(var_name),
             Token::NumericToken(var_name) => Expression::Atom(var_name),
             Token::OpenParenthesisToken(_) => {
@@ -387,7 +407,7 @@ impl Program {
                 last_expr.unwrap()
             },
             t => return Err(
-                LangError::new(format!("Unknown reference to \x1b[1;32m\"{:?}\"\x1b[0m", t))
+                LangError::new(format!("[Tokens]: Unknown reference to \x1b[1;32m\"{:?}\"\x1b[0m", t))
             ),
         };
 
