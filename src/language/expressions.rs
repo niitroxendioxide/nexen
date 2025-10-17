@@ -88,7 +88,7 @@ impl Expression {
     }
 
     pub fn evaluate_print(&self) -> bool {
-        !self.is_block() //&& !self.is_conditional()
+        false // !self.is_block() //&& !self.is_conditional()
     }
 
     pub fn eval(&self, scopes: &mut ScopeStack) -> Result<DataType, LangError> {
@@ -102,7 +102,12 @@ impl Expression {
                     }
                 }
 
-                // Get and clone the function data to avoid borrow conflicts
+                if let Some(scope_registry) = scopes.get_native_registry() {                    
+                    if scope_registry.has(&fn_name) {
+                        return scope_registry.call(&fn_name, &arg_values);
+                    }
+                }
+
                 let (params, body) = match scopes.get(&fn_name) {
                     Some(fn_data) => {
                         match fn_data {
@@ -157,7 +162,11 @@ impl Expression {
                     return Ok(value.clone());
                 }
 
-                Ok(DataType::String(val.clone()))
+                if val.starts_with("\"") && val.ends_with("\"") {
+                    return Ok(DataType::String(val[1..val.len()-1].to_string()));
+                }
+                
+                Err(LangError::new(format!("Variable '{}' is not defined", val)))
             },
             Expression::Operation(op, tree) => {
                 match tree.first().unwrap().eval(scopes) {
@@ -192,8 +201,16 @@ impl Expression {
                                         LangError::new(format!("Cannot compare: \x1b[1;32m\"{} > {}\"\x1b[0m", lhs, rhs))
                                     )
                                 },
+                                "<" => {
+                                    if lhs.get_type() == DataTypeType::Float && rhs.get_type() == DataTypeType::Float {
+                                        return Ok(DataType::Bool(lhs.as_float() < rhs.as_float()));
+                                    }
+
+                                    return Err(
+                                        LangError::new(format!("Cannot compare: \x1b[1;32m\"{} > {}\"\x1b[0m", lhs, rhs))
+                                    )
+                                },
                                 /*"!=" => if lhs != rhs { 1.0 } else { 0.0 },
-                                "<" => if lhs < rhs { 1.0 } else { 0.0 },
                                 ">=" => if lhs >= rhs { 1.0 } else { 0.0 },
                                 "<=" => if lhs <= rhs { 1.0 } else { 0.0 },
                                 "&&" => if lhs != 0.0 && rhs != 0.0 { 1.0 } else { 0.0 },

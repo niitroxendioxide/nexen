@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use crate::language::{datatypes::DataType, errors::LangError, expressions::Expression};
+use crate::language::{binder::FunctionRegistry, datatypes::DataType, errors::LangError, expressions::Expression};
 
 #[derive(Clone)]
 pub struct Scope {
@@ -8,6 +8,7 @@ pub struct Scope {
 
 pub struct ScopeStack {
     scopes: Vec<Scope>,
+    registry: Option<*const FunctionRegistry>,
 }
 
 impl Scope {
@@ -22,6 +23,7 @@ impl ScopeStack {
     pub fn new() -> Self {
         ScopeStack {
             scopes: vec![Scope::new()],
+            registry: None,
         }
     }
 
@@ -33,6 +35,14 @@ impl ScopeStack {
         if self.scopes.len() >= 1 {
             self.scopes.pop();
         }
+    }
+
+    pub fn set_native_registry(&mut self, registry: &FunctionRegistry) {
+        self.registry = Some(registry as *const FunctionRegistry);
+    }
+
+    pub fn get_native_registry(&self) -> Option<&FunctionRegistry> {
+        self.registry.map(|ptr| unsafe { &*ptr })
     }
 
     pub fn define_function(&mut self, fn_name: String, params: Vec<String>, body: Box<Expression>) {

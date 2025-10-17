@@ -1,5 +1,16 @@
-function print(x) {
-    x;
+{
+    let a = "Hello world!";
+    println(a);
 }
 
-print("Hello world!");
+function doppler(g) {
+    let r = g * g;
+    println(r);
+}
+
+function printLen(a) {
+    let r = len(a);
+    println(a, " is ", r, " characters long.");
+}
+
+printLen("pedrete");

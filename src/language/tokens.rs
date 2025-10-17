@@ -1,6 +1,8 @@
+use crate::language::binder::FunctionRegistry;
 use crate::language::errors::LangError;
 use crate::language::expressions::*;
 use crate::language::scopes::ScopeStack;
+use crate::language::stdlib;
 
 static LINE_END_TOKEN: &str = ";";
 
@@ -80,6 +82,7 @@ pub struct Program {
     pub source: String,
     pub tokens: Vec<Token>,
     pub scopes: ScopeStack,
+    pub registry: FunctionRegistry,
 }
 
 impl std::fmt::Display for Token {
@@ -229,6 +232,7 @@ impl Program {
             source,
             tokens: vec![],
             scopes: ScopeStack::new(),
+            registry: FunctionRegistry::new(),
         }
     }
 
@@ -343,9 +347,6 @@ impl Program {
                         }
                     }
 
-                    base_str.remove(0); // initial "
-                    base_str.remove(base_str.len() - 1);
-
                     let current_token = Token::StringToken(base_str);
                     new_tokens.push(current_token);
                     
@@ -422,6 +423,9 @@ impl Program {
     }
 
     pub fn begin(&mut self) -> Result<(), LangError> {
+        stdlib::register_std_functions(&mut self.registry);
+        self.scopes.set_native_registry(&self.registry);
+
         loop {
             let next_token = self.peek();
             if next_token == Token::EofToken {
@@ -522,7 +526,11 @@ impl Program {
                 
                 Expression::If(Box::new(condition), Box::new(then_body), else_body)
             },
-            Token::ScopeBeginToken(_) => Expression::Block(vec![]),
+            Token::ScopeBeginToken(_) => {
+                let block = self.parse_block();
+                assert_eq!(self.next(), Token::ScopeEndToken("}".to_string()));
+                block
+            },
             Token::BoolToken(val) => Expression::Atom(val),
             Token::StringToken(val) => Expression::Atom(val),
             Token::IdentifierToken(var_name) => {
