@@ -1,16 +1,30 @@
-{
-    let a = "Hello world!";
-    println(a);
+function get_name(id) {
+    if id == 1 {
+       "Niitroxen"
+    }
 }
 
-function doppler(g) {
-    let r = g * g;
-    println(r);
+function oper(a, b, operation) {
+    if operation == "+" {
+        a + b;
+    }
+
+    if operation == "-" {
+        a - b;
+    }
+
+    if operation == "*" {
+        a * b;
+    }
+
+    if operation == "/" {
+        a / b;
+    }
 }
 
-function printLen(a) {
-    let r = len(a);
-    println(a, " is ", r, " characters long.");
-}
+let a = 1;
 
-printLen("pedrete");
+let b = 2;
+let res = oper(a, b, "/");
+
+println(res);
