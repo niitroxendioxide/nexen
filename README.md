@@ -14,20 +14,22 @@ Should have these features:
 ```ts
 using std;
 
-enum Types {
+enum FooType {
   Default,
 }
 
 class Foo {
-  data: [u8],
+  data: [float],
+  type: FooType,
 }
 
 class Bar : Foo {
-  name: string,
+  public name: string,
 
   static method new(p_name) {
     return Bar {
         data: [0],
+        type: FooType.Default,
         name: p_name,
     }
   }

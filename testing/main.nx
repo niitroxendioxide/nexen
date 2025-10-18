@@ -1,5 +1,4 @@
-function nahue(a) {
-    let b = "Hello, my name is nahue and I hate" + a;
-}
+let b = 1;
+let a = fib(b);
 
-nahue("testing");
+println(a);

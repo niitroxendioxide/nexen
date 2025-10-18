@@ -357,6 +357,10 @@ impl Program {
                     
                     while next_token_idx < tokens.len() {
                         let next_token = &tokens[next_token_idx];
+                        if next_token.value == "_" {
+                            continue;
+                        }
+                        
                         if next_token.token_type != SplitTokenType::NumToken || Program::is_token_ending(next_token) {
                             break;
                         }

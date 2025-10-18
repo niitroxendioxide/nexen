@@ -38,7 +38,7 @@ fn main() {
                     match language::interpret(source) {
                         Ok(program_exec_time) => {
                             if params.debug {
-                                println!("Program finished; Execution time: {:?}", program_exec_time);
+                                println!("\r\x1b[1;32m[Nexen]\x1b[0m Program finished\n-> Execution time: \x1b[1;31m[{:?}]\x1b[0m", program_exec_time);
                             }
                         }
                         Err(err) =>println!("[Interpreter] when executing {}: \n\n> {}", file_path, err)
