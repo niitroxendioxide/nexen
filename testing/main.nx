@@ -1,2 +1,9 @@
-let b = 1_000_000;
-println(b);
+
+function salutate(name) {
+    if name == "sfant43" {
+        println("Hello, Sir wolk!");
+    }
+}
+
+local username = "sfant43";
+salutate(username);

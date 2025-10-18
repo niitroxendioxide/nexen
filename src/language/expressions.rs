@@ -191,7 +191,13 @@ impl Expression {
                                 "*" => return Ok(DataType::Float(lhs.as_float() * rhs.as_float())),
                                 "/" => return Ok(DataType::Float(lhs.as_float() / rhs.as_float())),
                                 "=" => return Ok(lhs),
-                                "==" => Ok(DataType::Bool(lhs.as_float() == rhs.as_float())),
+                                "==" => {
+                                    if lhs.get_type() == DataTypeType::String {
+                                        return Ok(DataType::Bool(lhs.as_string() == rhs.as_string()));
+                                    } else {
+                                        return Ok(DataType::Bool(lhs.as_float() == rhs.as_float()));
+                                    }
+                                }
                                 ">" => {
                                     if lhs.get_type() == DataTypeType::Float && rhs.get_type() == DataTypeType::Float {
                                         return Ok(DataType::Bool(lhs.as_float() > rhs.as_float()));
