@@ -18,11 +18,11 @@ enum Types {
     Default,
 }
 
-struct Foo {
+class Foo {
     data: [u8],
 }
 
-struct Bar : Foo {
+class Bar : Foo {
     pub name: string,
     
     pub function new(p_name) {
