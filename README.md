@@ -1,13 +1,6 @@
 # Custom Language
 
-Should have these features:
 
-- Rust-like syntax
-- Static Typing
-- RAII
-- Classes
-  - Inheritance
-  - Operator overload
 
 ## Goal language look
 
@@ -57,3 +50,4 @@ function main() {
   }
 }
 ```
+
