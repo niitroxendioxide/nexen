@@ -23,9 +23,9 @@ class Foo {
 }
 
 class Bar : Foo {
-    pub name: string,
+    name: string,
     
-    pub function new(p_name) {
+    method new(p_name) {
         return Bar {
             data: [0],
             name: p_name,
