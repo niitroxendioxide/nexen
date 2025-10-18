@@ -1,4 +1,2 @@
-let b = 1;
-let a = fib(b);
-
-println(a);
+let b = 1_000_000;
+println(b);

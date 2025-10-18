@@ -358,6 +358,7 @@ impl Program {
                     while next_token_idx < tokens.len() {
                         let next_token = &tokens[next_token_idx];
                         if next_token.value == "_" {
+                            next_token_idx += 1;
                             continue;
                         }
                         
