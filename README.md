@@ -11,43 +11,47 @@ Should have these features:
 
 ## Goal language look
 
-```
+```ts
 using std;
 
 enum Types {
-    Default,
+  Default,
 }
 
 class Foo {
-    data: [u8],
+  data: [u8],
 }
 
 class Bar : Foo {
-    name: string,
-    
-    method new(p_name) {
-        return Bar {
-            data: [0],
-            name: p_name,
-        }
+  name: string,
+
+  static method new(p_name) {
+    return Bar {
+        data: [0],
+        name: p_name,
     }
+  }
+  
+  method do_stuff() {
+    std::println("Doing stuff");
+  }
 }
 
 module ObjectCreator {
-    pub function create_bar(name) -> Result<Bar, std::Error> {
-        let instance = Bar::new();
-        if (name.len() <= 0) {
-            return Error("");
-        }
+  function create_bar(name) -> Result<Bar, Error> {
+      if (name.len() <= 0) {
+          return Error("");
+      }
 
-        return instance;
-    }
+      let instance = Bar::new(name);
+      return instance;
+  }
 }
 
 function main() {
-    let instance = ObjectCreator.create_foo();
-    if (instance.is_err()) {
-        std::println("Error");
-    }
+  let instance = ObjectCreator.create_foo("niitroxen");
+  if (instance.is_err()) {
+      std::println("Error");
+  }
 }
 ```
