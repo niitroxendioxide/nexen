@@ -7,7 +7,7 @@ pub fn print(args: &[DataType]) -> Result<DataType, LangError> {
 
     let iterator = args.iter();
     for arg in iterator {
-        let mut second_par = "";
+        let mut second_par = " ";
         if arg == &args[args.len() - 1] {
             second_par = "\n";
         }

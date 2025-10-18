@@ -15,36 +15,26 @@ Should have these features:
 using std;
 
 enum Types {
-    Default = 0,
+    Default,
 }
 
-class Foo {
-    pub data: [u8],
+struct Foo {
+    data: [u8],
 }
 
-impl Foo {
-    pub function new() {
-        return Foo {
-            data: [0],
-        }
-    }
-}
-
-class Bar : Foo {
+struct Bar : Foo {
     pub name: string,
-}
-
-impl Bar {
-    pub function new(name: string) {
+    
+    pub function new(p_name) {
         return Bar {
             data: [0],
-            name: name,
+            name: p_name,
         }
     }
 }
 
 module ObjectCreator {
-    pub function create_bar(name: string) -> Result<Bar, std::Error> {
+    pub function create_bar(name) -> Result<Bar, std::Error> {
         let instance = Bar::new();
         if (name.len() <= 0) {
             return Error("");

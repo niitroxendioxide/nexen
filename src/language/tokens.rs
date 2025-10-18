@@ -166,8 +166,8 @@ fn parse_function_call_with_program(call_str: &str) -> Result<(String, Vec<Expre
         
         let mut arg_expressions = Vec::new();
         for arg_str in arg_strings {
-            let mut mini_program = Program::new(arg_str.trim().to_string());
-            mini_program.tokenize();
+            let mut mini_program = Program::new();
+            mini_program.tokenize(arg_str.trim().to_string());
             let expr = mini_program.parse_expression(0.0)?;
             arg_expressions.push(expr);
         }
@@ -227,17 +227,16 @@ impl Token {
 }
 
 impl Program {
-    pub fn new(source: String) -> Self {
+    pub fn new() -> Self {
         Program {
-            source,
+            source: "".to_string(),
             tokens: vec![],
             scopes: ScopeStack::new(),
             registry: FunctionRegistry::new(),
         }
     }
 
-    pub fn tokenize(&mut self) {
-        let source = self.source.clone();
+    pub fn tokenize(&mut self, source: String) {
         let tokens: Vec<SplitToken>  =  source
             .chars()
             .map(|token_char| match token_char {
@@ -272,7 +271,7 @@ impl Program {
 
     fn process_name_token(&self, token_str: &str) -> Token {
         match token_str {
-            "let" | "local" | "var" => Token::LetToken(token_str.to_string()),
+            "let" | "local" => Token::LetToken(token_str.to_string()),
             "if" => Token::IfToken(token_str.to_string()),
             "else" => Token::ElseToken(token_str.to_string()),
             "while" => Token::WhileToken(token_str.to_string()),

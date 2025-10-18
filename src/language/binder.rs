@@ -30,7 +30,10 @@ impl FunctionRegistry {
         if let Some(func) = self.get(name) {
             func(args)
         } else {
-            Err(LangError::new(format!("Native function '{}' not found", name)))
+            Err(LangError::new(format!(
+                "Native function '{}' not found",
+                name
+            )))
         }
     }
 
@@ -40,13 +43,3 @@ impl FunctionRegistry {
         }
     }
 }
-
-// Initialize all standard library functions
-/*pub fn create_std_registry() -> NativeFunctionRegistry {
-    let mut registry = NativeFunctionRegistry::new();
-    
-    // Register all std functions
-    // crate::std_lib::register_std_functions(&mut registry);
-    
-    registry
-}*/

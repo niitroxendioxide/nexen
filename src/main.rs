@@ -2,31 +2,53 @@ use lang::language;
 use lang::files;
 use std::env;
 
+struct ProgramParams {
+    tokenize: bool,
+    debug: bool,
+}
+
+fn parse_params(args: &Vec<String>, params: &mut ProgramParams) {
+    for arg in args.iter().skip(2) {
+        match arg.as_str() {
+            "-t" | "--tokenize" => params.tokenize = true,
+            "-d" | "--debug" => params.debug = true,
+            _ => println!("Unknown argument: {}", arg),
+        }
+    }
+}
+
 fn main() {
     let args: Vec<String> = env::args().collect();
-
+    let mut params = ProgramParams {
+        tokenize: false,
+        debug: false,
+    };
+    
     if args.len() > 1 {
+        parse_params(&args, &mut params);
         let file_path = &args[1];
-        let tokenize = if args.len() > 2 && args[2] == "-t" {
-            true
-        } else { false };
-        
+
         match files::file::validate_and_read_file(file_path) {
             Ok(source) => {
-                if tokenize {
+                if params.tokenize {
                     if let Err(err) = language::tokenize(source) {
-                        println!("[NX-Interpreter] when tokenizing {}: \n\n> {}", file_path, err)
+                        println!("[Interpreter] when tokenizing {}: \n\n> {}", file_path, err)
                     }
                 } else {
-                    if let Err(err) = language::interpret(source) {
-                        println!("[NX-Interpreter] when executing {}: \n\n> {}", file_path, err)
+                    match language::interpret(source) {
+                        Ok(program_exec_time) => {
+                            if params.debug {
+                                println!("Program finished; Execution time: {:?}", program_exec_time);
+                            }
+                        }
+                        Err(err) =>println!("[Interpreter] when executing {}: \n\n> {}", file_path, err)
                     }
                 }
+
             },
             Err(err) => println!("{}", err),
         }
     } else {
         println!("No argument was provided.");
     }
-
 }

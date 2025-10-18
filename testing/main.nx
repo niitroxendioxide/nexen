@@ -1,0 +1,5 @@
+function nahue(a) {
+    let b = "Hello, my name is nahue and I hate" + a;
+}
+
+nahue("testing");
