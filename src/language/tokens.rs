@@ -269,150 +269,12 @@ impl Program {
         self.process_tokens(tokens);
     }
 
-    fn process_name_token(&self, token_str: &str) -> Token {
-        match token_str {
-            "let" | "local" => Token::LetToken(token_str.to_string()),
-            "if" => Token::IfToken(token_str.to_string()),
-            "else" => Token::ElseToken(token_str.to_string()),
-            "while" => Token::WhileToken(token_str.to_string()),
-            "for" => Token::ForToken(token_str.to_string()),
-            "function" => Token::FunctionToken(token_str.to_string()),
-            "public" => Token::PublicToken(token_str.to_string()),
-            "private" => Token::PrivateToken(token_str.to_string()),
-            "protected" => Token::ProtectedToken(token_str.to_string()),
-            "be" => Token::EqualToken(token_str.to_string()),
-            "return" => Token::ReturnToken(token_str.to_string()),
-            "true" | "false" => Token::BoolToken(token_str.to_string()),
-            _ => Token::IdentifierToken(token_str.to_string()),
-        }
-    }
-
     fn process_tokens(&mut self, tokens: Vec<SplitToken>) {
         let mut new_tokens: Vec<Token> = Vec::new();
-        let mut cur_idx = 0;
-
-        while cur_idx < tokens.len() {
-            let current_token = &tokens[cur_idx];
-            if current_token.value == " " {
-                cur_idx += 1;
-                continue;
-            }
-
-            match current_token.token_type {
-                SplitTokenType::CharToken => {
-                    let mut base_str = String::new();
-                    let mut next_token_idx = cur_idx;
-                    
-                    let mut is_fn_def = false;
-                    while next_token_idx < tokens.len() {
-                        let next_token: &SplitToken = &tokens[next_token_idx];
-                        
-                        if next_token.value == "(" {
-                            is_fn_def = true;
-                        }
-
-                        if !is_fn_def && (next_token.token_type == SplitTokenType::SplitToken 
-                                || next_token.token_type == SplitTokenType::EndExpressionToken
-                                || next_token.token_type == SplitTokenType::OperationToken) {
-                            break;
-                        }
-
-                        base_str.push_str(&next_token.value);
-                        next_token_idx += 1;
-
-                        if is_fn_def && next_token.token_type == SplitTokenType::OperationToken
-                            && next_token.value == ")" { 
-                            break;
-                        }
-                    }
-                    
-                    let current_token = self.process_name_token(&base_str);
-
-                    new_tokens.push(current_token);
-                    
-                    cur_idx = next_token_idx;    
-                },
-                SplitTokenType::StrToken => {
-                    let mut base_str = String::new();
-                    let mut next_token_idx = cur_idx;
-                    
-                    while next_token_idx < tokens.len() {
-                        let next_token: &SplitToken = &tokens[next_token_idx];
-                        base_str.push_str(&next_token.value);
-                        next_token_idx+=1;
-
-                        if next_token.token_type == SplitTokenType::StrToken && next_token.value == "\"" && (next_token_idx-1) > cur_idx {
-                            break;
-                        }
-                    }
-
-                    let current_token = Token::StringToken(base_str);
-                    new_tokens.push(current_token);
-                    
-                    cur_idx = next_token_idx; 
-                },
-                SplitTokenType::NumToken => {
-                    let mut base_str = String::new();
-                    let mut next_token_idx = cur_idx;
-                    
-                    while next_token_idx < tokens.len() {
-                        let next_token = &tokens[next_token_idx];
-                        if next_token.value == "_" {
-                            next_token_idx += 1;
-                            continue;
-                        }
-                        
-                        if next_token.token_type != SplitTokenType::NumToken || Program::is_token_ending(next_token) {
-                            break;
-                        }
-                        base_str.push_str(&next_token.value);
-                        next_token_idx += 1;
-                    }
-                    
-                    new_tokens.push(Token::NumericToken(base_str));
-                    
-                    cur_idx = next_token_idx; 
-                },
-                SplitTokenType::OperationToken | SplitTokenType::EndExpressionToken => {
-                    let mut added_token = match current_token.value.as_str() {
-                        "{" => Token::ScopeBeginToken(current_token.value.clone()),
-                        "}" => Token::ScopeEndToken(current_token.value.clone()),
-                        "(" => Token::OpenParenthesisToken(current_token.value.clone()),
-                        ")" => Token::CloseParenthesisToken(current_token.value.clone()),
-                        ";" => Token::EndExpressionToken(current_token.value.clone()),
-                        _ => Token::OperationToken(current_token.value.clone()),
-                    };
-
-                    let mut base_str = String::new();
-                    base_str.push_str(&current_token.value);
-
-                    if cur_idx + 1 < tokens.len() {
-                        let next_token = &tokens[cur_idx + 1];
-
-                        if next_token.token_type == SplitTokenType::OperationToken && ( next_token.value == "=" || current_token.value == "=" ) {
-                            base_str.push_str(&next_token.value);
-                            cur_idx += 1;
-
-                            added_token = match base_str.as_str() {
-                                "==" => Token::CompareToken(base_str),
-                                "!=" => Token::NotEqualToken(base_str),
-                                ">=" => Token::GreaterEqualToken(base_str),
-                                "<=" => Token::LessEqualToken(base_str),
-                                _ => added_token,
-                            }
-                        }
-                    }
-
-                    new_tokens.push(added_token);
-
-                    cur_idx += 1;
-                }
-                _ => {
-                    cur_idx += 1;
-                }
-            }
-        }
-
+        
+        use crate::language::tokenizer::tokenize;
+        tokenize(&mut new_tokens, &tokens);
+        
         new_tokens.reverse();
 
         self.tokens = new_tokens;
@@ -550,6 +412,63 @@ impl Program {
                 let last_expr = self.parse_expression(0.0);
                 assert_eq!(self.next(), Token::CloseParenthesisToken(")".to_string()));
                 last_expr.unwrap()
+            },
+            Token::ReturnToken(_) => {
+                let result = self.parse_expression(0.0);
+                match result {
+                    Ok(return_val) => Expression::Return(Box::new(return_val)),
+                    Err(err) => return Err(err),
+                }
+            },
+            
+            Token::ForToken(_) => {
+                // Expect: for i = start, end [, step]
+                
+                // Parse variable name
+                let var_name = match self.next() {
+                    Token::IdentifierToken(name) => name,
+                    t => return Err(LangError::new(format!("Expected variable name after 'for', got: {:?}", t))),
+                };
+                
+                match self.next() {
+                    Token::EqualToken(op) | Token::OperationToken(op) if op == "=" => {},
+                    t => return Err(LangError::new(format!("Expected '=' after for variable, got: {:?}", t))),
+                }
+                
+                let start = self.parse_expression(0.0)?;
+                
+                match self.next() {
+                    Token::IdentifierToken(ref s) if s == "," => {},
+                    Token::OperationToken(ref s) if s == "," => {},
+                    t => return Err(LangError::new(format!("Expected ',' after for start value, got: {:?}", t))),
+                }
+                
+                let end = self.parse_expression(0.0)?;
+                
+                let step = match self.peek() {
+                    Token::IdentifierToken(ref s) | Token::OperationToken(ref s) => {
+                        if s == "," {
+                            None
+                        } else {
+                            self.next();
+                            Some(Box::new(self.parse_expression(0.0)?))
+                        }
+                    },
+                    _ => None,
+                };
+                
+                match self.next() {
+                    Token::ScopeBeginToken(_) => {},
+                    t => return Err(LangError::new(format!("Expected '{{' after for parameters, got: {:?}", t))),
+                }
+                
+                let body = self.parse_block();
+                match self.next() {
+                    Token::ScopeEndToken(_) => {},
+                    t => return Err(LangError::new(format!("Expected '}}' after for body, got: {:?}", t))),
+                }
+                
+                Expression::ForLoop(var_name, Box::new(start), Box::new(end), step, Box::new(body))
             },
             t => return Err(
                 LangError::new(format!("[Tokens]: Unknown reference to \x1b[1;32m\"{:?}\"\x1b[0m", t))

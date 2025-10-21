@@ -52,6 +52,16 @@ impl ScopeStack {
     pub fn declare(&mut self, var_name: String, value: DataType) {
         self.scopes.last_mut().unwrap().variables.insert(var_name, value);
     }
+    
+    pub fn set_or_declare(&mut self, var_name: String, value: DataType) {
+        if let Some(scope) = self.scopes.last_mut() {
+            if scope.variables.contains_key(&var_name) {
+                scope.variables.insert(var_name, value);
+            } else {
+                scope.variables.insert(var_name, value);
+            }
+        }
+    }
 
     pub fn set(&mut self, var_name: &str, value: DataType) -> Result<(), LangError> {
         for scope in self.scopes.iter_mut().rev() {

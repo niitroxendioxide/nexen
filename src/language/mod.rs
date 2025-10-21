@@ -8,6 +8,7 @@ pub mod scopes;
 pub mod binder;
 pub mod stdlib;
 pub mod vm;
+pub mod tokenizer;
 
 pub fn interpret(source: String) -> Result<std::time::Duration, errors::LangError> {
     let mut program = tokens::Program::new();

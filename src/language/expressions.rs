@@ -9,10 +9,16 @@ pub enum Expression {
     // fn
     FunctionCall(String, Box<Vec<Expression>>),
     FunctionDeclaration(String, Vec<String>, Box<Expression>),
+    Return(Box<Expression>),
     
     // conditionals
     If(Box<Expression>, Box<Expression>, Option<Box<Expression>>), 
     Block(Vec<Expression>),
+    ForLoop(String, Box<Expression>, Box<Expression>, Option<Box<Expression>>, Box<Expression>),
+    // WhileLoop(Box<Expression>, Box<Expression>),  // (condition, body)
+    // InfiniteLoop(Box<Expression>),  // (body)
+    // Break,  // break statement
+    // Continue,  // continue statement
 }
 
 impl std::fmt::Display for Expression {
@@ -48,7 +54,8 @@ impl std::fmt::Display for Expression {
                     write!(f, "{} ", expr)?;
                 }
                 write!(f, "}}")
-            }
+            },
+            t=>write!(f, "{:?}", t),
         }
     }
 }
@@ -93,6 +100,72 @@ impl Expression {
 
     pub fn eval(&self, scopes: &mut ScopeStack) -> Result<DataType, LangError> {
         match self {
+            Expression::Return(expr) => {
+                let evaluated = expr.eval(scopes);
+                match evaluated {
+                    Ok(value) => Ok(DataType::Return(Box::new(value))),
+                    Err(err) => return Err(err),
+                }
+            },
+            Expression::ForLoop(var_name, start_expr, end_expr, step_expr, body) => {
+                // Evaluate start, end, and step
+                let start_val = start_expr.eval(scopes)?.as_float();
+                let end_val = end_expr.eval(scopes)?.as_float();
+                let step_val = if let Some(step) = step_expr {
+                    step.eval(scopes)?.as_float()
+                } else {
+                    1.0 // Default step is 1
+                };
+                
+                // Validate step
+                if step_val == 0.0 {
+                    return Err(LangError::new("For loop step cannot be zero".to_string()));
+                }
+                
+                // Create a new scope for the loop
+                scopes.push_scope();
+                
+                let mut result = DataType::EndOfBlock;
+                let mut current = start_val;
+                
+                // Determine loop direction
+                let ascending = step_val > 0.0;
+                
+                loop {
+                    // Check loop condition based on direction
+                    if ascending && current > end_val {
+                        break;
+                    }
+                    if !ascending && current < end_val {
+                        break;
+                    }
+                    
+                    // Set loop variable
+                    scopes.set_or_declare(var_name.clone(), DataType::Float(current));
+                    
+                    // Execute body
+                    match body.eval(scopes) {
+                        Ok(val) => {
+                            // Check for early return
+                            if matches!(val, DataType::Return(_)) {
+                                scopes.pop_scope();
+                                return Ok(val);
+                            }
+                            result = val;
+                        },
+                        Err(err) => {
+                            scopes.pop_scope();
+                            return Err(err);
+                        }
+                    }
+                    
+                    // Increment/decrement
+                    current += step_val;
+                }
+                
+                scopes.pop_scope();
+                Ok(result)
+            },
             Expression::FunctionCall(fn_name, args) => {
                 let mut arg_values = Vec::new();
                 for arg in args.iter() {
@@ -118,7 +191,6 @@ impl Expression {
                                         fn_name, params.len(), args.len()
                                     )));
                                 }
-                                // Clone to avoid borrow conflicts
                                 (params.clone(), body.clone())
                             }
                             _ => return Err(LangError::new(format!("'{}' is not a function", fn_name)))
@@ -127,23 +199,23 @@ impl Expression {
                     None => return Err(LangError::new(format!("Function '{}' is not defined", fn_name))),
                 };
                 
-                // Now we can mutably borrow scopes again
                 scopes.push_scope();
                 
-                // Bind parameters to argument values
                 for (param_name, arg_value) in params.iter().zip(arg_values.iter()) {
                     scopes.declare(param_name.clone(), arg_value.clone());
                 }
                 
-                // Execute function body
-                let result = body.eval(scopes)?;
-                
-                // Pop function scope
+                // eval body & leave scope
+                let result = body.eval(scopes);
                 scopes.pop_scope();
                 
-                Ok(result)
+                match result {
+                    Ok(DataType::Return(inner) )=> Ok(*inner),
+                    Ok(other) => Ok(other),
+                    Err(e) => Err(e),
+                }
             },
-            Expression::Declaration(decl) | Expression::FunctionDeclaration(decl, ..) => return Err(
+            Expression::Declaration(decl) | Expression::FunctionDeclaration(decl, ..)  => return Err(
                 LangError::new(format!("Cannot evaluate declaration: {}", decl))
             ),
             Expression::Atom(val) => {
@@ -234,12 +306,21 @@ impl Expression {
             Expression::If(condition, then_body, else_body) => {
                 match condition.eval(scopes) {
                     Ok(cond) => {
-                        if cond.is_truthy() {
+                        let result = if cond.is_truthy() {
                             then_body.eval(scopes)
                         } else if let Some(else_expr) = else_body {
                             else_expr.eval(scopes)
                         } else {
                             Ok(DataType::Float(0.0))
+                        };
+                        
+                        // Propagate return values
+                        match result {
+                            Ok(DataType::Return(value)) => {
+                                 return Ok(DataType::Return(value));
+                            },
+                            Ok(other) => return Ok(other),
+                            Err(err) => return Err(err),
                         }
                     },
                     Err(err) => return Err(err),
@@ -255,6 +336,11 @@ impl Expression {
                     } else if let Some((var_name, expr_tree, is_declaration)) = expr.is_assign() {
                         let value = expr_tree.eval(scopes)?;
                         
+                        if matches!(value, DataType::Return(_)) {
+                            scopes.pop_scope();
+                            return Ok(value);
+                        }
+                        
                         if is_declaration {
                             scopes.declare(var_name, value.clone());
                             result = value;
@@ -264,7 +350,14 @@ impl Expression {
                         }
                     } else {
                         match expr.eval(scopes) {
-                            Ok(val) => result = val,
+                            Ok(val) => {
+                                if matches!(val, DataType::Return(_)) {
+                                    scopes.pop_scope();
+                                    return Ok(val);
+                                }
+                                
+                                result = val;
+                            },
                             Err(err) => {
                                 scopes.pop_scope();
                                 return Err(err);

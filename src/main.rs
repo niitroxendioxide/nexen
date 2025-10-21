@@ -1,6 +1,5 @@
 use lang::files::file;
 use lang::language;
-use lang::files;
 use std::env;
 
 struct ProgramParams {
@@ -36,7 +35,7 @@ fn main() {
         let using_source = if params.is_source {
             Some(file_path.to_string())
         } else {
-            if let Ok(ex_source) = files::file::validate_and_read_file(file_path) {
+            if let Ok(ex_source) = file::validate_and_read_file(file_path) {
                 Some(ex_source)
             } else {
                 None

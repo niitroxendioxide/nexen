@@ -1,9 +1,3 @@
-
-function salutate(name) {
-    if name == "sfant43" {
-        println("Hello, Sir wolk!");
-    }
+for i = 1, 10 {
+    println(i);
 }
-
-local username = "sfant43";
-salutate(username);

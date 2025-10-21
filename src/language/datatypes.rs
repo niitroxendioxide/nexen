@@ -6,6 +6,7 @@ pub enum DataType {
     Bool(bool),
     String(String),
     Function(Vec<String>, Expression),
+    Return(Box<DataType>),
     EndOfBlock,
 }
 
@@ -23,44 +24,42 @@ impl DataType {
             DataType::Float(val) => *val,
             DataType::Bool(b) => if *b { 1.0 } else { 0.0 },
             DataType::String(str) => str.parse::<f32>().unwrap_or(0.0),
-            _ => panic!("Cannot variable as float"),
+            DataType::Return(inner) => inner.as_float(),  // Unwrap for conversions
+            _ => panic!("Cannot convert variable to float"),
         }
     }
-
+    
     pub fn as_bool(&self) -> bool {
         match self {
             DataType::Bool(b) => *b,
             DataType::Float(val) => *val != 0.0,
-            DataType::String(str) => {
-                if str == &"true" {
-                    return true;
-                }
-
-                false
-            },
-            _=> panic!("Cannot evaluate variable as bool"),
+            DataType::String(str) => str == "true",
+            DataType::Return(inner) => inner.as_bool(),  // Unwrap for conversions
+            _ => panic!("Cannot evaluate variable as bool"),
         }
     }
-
+    
     pub fn get_type(&self) -> DataTypeType {
         match self {
             DataType::Float(_) => DataTypeType::Float,
             DataType::Bool(_) => DataTypeType::Bool,
             DataType::String(_) => DataTypeType::String,
             DataType::Function(..) => DataTypeType::Function,
+            DataType::Return(inner) => inner.get_type(),  // Get inner type
             DataType::EndOfBlock => panic!("Cannot get type of eof"),
         }
     }
-
+    
     pub fn as_string(&self) -> String {
         match self {
             DataType::String(str) => format!("{}", str),
             DataType::Float(val) => format!("{}", val),
             DataType::Bool(b) => format!("{}", b),
+            DataType::Return(inner) => inner.as_string(),  // Unwrap for conversions
             _ => panic!("Cannot evaluate variable as string"),
         }
     }
-
+    
     pub fn is_truthy(&self) -> bool {
         self.as_bool()
     }
@@ -72,6 +71,7 @@ impl std::fmt::Display for DataType {
             DataType::Float(val) => write!(f, "{}", val),
             DataType::Bool(b) => write!(f, "{}", b),
             DataType::String(str) => write!(f, "{}", str),
+            DataType::Return(inner) => write!(f, "{}", inner),  // Display inner value
             _ => Ok(()),
         }
     }
