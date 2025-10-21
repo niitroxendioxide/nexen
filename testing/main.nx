@@ -1,3 +1,8 @@
-for i = 1, 10 {
-    println(i);
+let a = 0;
+loop {
+    if a > 10 {
+        break;
+    }
+    println(a);
+    a = a + 1;
 }

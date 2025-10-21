@@ -15,10 +15,10 @@ pub enum Expression {
     If(Box<Expression>, Box<Expression>, Option<Box<Expression>>), 
     Block(Vec<Expression>),
     ForLoop(String, Box<Expression>, Box<Expression>, Option<Box<Expression>>, Box<Expression>),
-    // WhileLoop(Box<Expression>, Box<Expression>),  // (condition, body)
-    // InfiniteLoop(Box<Expression>),  // (body)
-    // Break,  // break statement
-    // Continue,  // continue statement
+    WhileLoop(Box<Expression>, Box<Expression>),  // (condition, body)
+    InfiniteLoop(Box<Expression>),  // (body)
+    Break,  // break statement
+    Continue,  // continue statement
 }
 
 impl std::fmt::Display for Expression {
@@ -108,16 +108,14 @@ impl Expression {
                 }
             },
             Expression::ForLoop(var_name, start_expr, end_expr, step_expr, body) => {
-                // Evaluate start, end, and step
                 let start_val = start_expr.eval(scopes)?.as_float();
                 let end_val = end_expr.eval(scopes)?.as_float();
                 let step_val = if let Some(step) = step_expr {
                     step.eval(scopes)?.as_float()
                 } else {
-                    1.0 // Default step is 1
+                    1.0 
                 };
                 
-                // Validate step
                 if step_val == 0.0 {
                     return Err(LangError::new("For loop step cannot be zero".to_string()));
                 }
@@ -140,13 +138,17 @@ impl Expression {
                         break;
                     }
                     
-                    // Set loop variable
                     scopes.set_or_declare(var_name.clone(), DataType::Float(current));
-                    
-                    // Execute body
                     match body.eval(scopes) {
                         Ok(val) => {
-                            // Check for early return
+                            if matches!(val, DataType::Break) {
+                                break;
+                            }
+                            
+                            if matches!(val, DataType::Continue) {
+                                continue;
+                            }
+
                             if matches!(val, DataType::Return(_)) {
                                 scopes.pop_scope();
                                 return Ok(val);
@@ -159,8 +161,81 @@ impl Expression {
                         }
                     }
                     
-                    // Increment/decrement
                     current += step_val;
+                }
+                
+                scopes.pop_scope();
+                Ok(result)
+            },
+            Expression::Break => Ok(DataType::Break),
+            Expression::Continue => Ok(DataType::Continue),
+            Expression::WhileLoop(condition, body) => {
+                scopes.push_scope();
+                
+                let mut result = DataType::EndOfBlock;
+                
+                loop {
+                    let cond_val = condition.eval(scopes)?;
+                    
+                    if !cond_val.is_truthy() {
+                        break;
+                    }
+                    match body.eval(scopes) {
+                        Ok(val) => {
+                            if matches!(val, DataType::Break) {
+                                break;
+                            }
+                            
+                            if matches!(val, DataType::Continue) {
+                                continue;
+                            }
+                            if matches!(val, DataType::Return(_)) {
+                                scopes.pop_scope();
+                                return Ok(val);
+                            }
+                            
+                            result = val;
+                        },
+                        Err(err) => {
+                            scopes.pop_scope();
+                            return Err(err);
+                        }
+                    }
+                }
+                
+                scopes.pop_scope();
+                Ok(result)
+            },
+            
+            Expression::InfiniteLoop(body) => {
+                scopes.push_scope();
+                
+                let mut result = DataType::EndOfBlock;
+                
+                loop {
+                    // Execute body
+                    match body.eval(scopes) {
+                        Ok(val) => {
+                            if matches!(val, DataType::Break) {
+                                break;
+                            }
+                            
+                            if matches!(val, DataType::Continue) {
+                                continue;
+                            }
+                            
+                            if matches!(val, DataType::Return(_)) {
+                                scopes.pop_scope();
+                                return Ok(val);
+                            }
+                            
+                            result = val;
+                        },
+                        Err(err) => {
+                            scopes.pop_scope();
+                            return Err(err);
+                        }
+                    }
                 }
                 
                 scopes.pop_scope();
@@ -336,7 +411,7 @@ impl Expression {
                     } else if let Some((var_name, expr_tree, is_declaration)) = expr.is_assign() {
                         let value = expr_tree.eval(scopes)?;
                         
-                        if matches!(value, DataType::Return(_)) {
+                        if matches!(value, DataType::Return(_) | DataType::Break | DataType::Continue) {
                             scopes.pop_scope();
                             return Ok(value);
                         }
@@ -351,7 +426,7 @@ impl Expression {
                     } else {
                         match expr.eval(scopes) {
                             Ok(val) => {
-                                if matches!(val, DataType::Return(_)) {
+                                if matches!(val, DataType::Return(_) | DataType::Break | DataType::Continue) {
                                     scopes.pop_scope();
                                     return Ok(val);
                                 }

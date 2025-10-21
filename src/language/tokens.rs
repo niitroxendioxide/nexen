@@ -56,6 +56,9 @@ pub enum Token {
     // Loops
     WhileToken(String),
     ForToken(String),
+    LoopToken(String),
+    BreakToken(String),
+    ContinueToken(String),
 
     // Functions
     FunctionToken(String),
@@ -470,6 +473,40 @@ impl Program {
                 
                 Expression::ForLoop(var_name, Box::new(start), Box::new(end), step, Box::new(body))
             },
+            Token::WhileToken(_) => {
+                let condition = self.parse_expression(0.0)?;
+                match self.next() {
+                    Token::ScopeBeginToken(_) => {},
+                    t => return Err(LangError::new(format!("Expected '{{' after while condition, got: {:?}", t))),
+                }
+                
+                let body = self.parse_block();
+                match self.next() {
+                    Token::ScopeEndToken(_) => {},
+                    t => return Err(LangError::new(format!("Expected '}}' after while body, got: {:?}", t))),
+                }
+                
+                Expression::WhileLoop(Box::new(condition), Box::new(body))
+            },
+            
+            Token::LoopToken(_) => {
+                match self.next() {
+                    Token::ScopeBeginToken(_) => {},
+                    t => return Err(LangError::new(format!("Expected '{{' after loop, got: {:?}", t))),
+                }
+                
+                let body = self.parse_block();
+                match self.next() {
+                    Token::ScopeEndToken(_) => {},
+                    t => return Err(LangError::new(format!("Expected '}}' after loop body, got: {:?}", t))),
+                }
+                
+                Expression::InfiniteLoop(Box::new(body))
+            },
+            
+            Token::BreakToken(_) => Expression::Break,
+            
+            Token::ContinueToken(_) => Expression::Continue,
             t => return Err(
                 LangError::new(format!("[Tokens]: Unknown reference to \x1b[1;32m\"{:?}\"\x1b[0m", t))
             ),

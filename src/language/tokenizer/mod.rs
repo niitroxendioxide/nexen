@@ -15,6 +15,9 @@ fn process_name_token(token_str: &str) -> Token {
         "do" => Token::ScopeBeginToken("{".to_string()),
         "end" => Token::ScopeEndToken("}".to_string()),
         "return" => Token::ReturnToken(token_str.to_string()),
+        "loop" => Token::LoopToken(token_str.to_string()),
+        "continue" => Token::ContinueToken(token_str.to_string()),
+        "break" => Token::BreakToken(token_str.to_string()),
         "true" | "false" => Token::BoolToken(token_str.to_string()),
         _ => Token::IdentifierToken(token_str.to_string()),
     }

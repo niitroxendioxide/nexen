@@ -7,6 +7,8 @@ pub enum DataType {
     String(String),
     Function(Vec<String>, Expression),
     Return(Box<DataType>),
+    Continue,
+    Break,
     EndOfBlock,
 }
 
@@ -46,7 +48,7 @@ impl DataType {
             DataType::String(_) => DataTypeType::String,
             DataType::Function(..) => DataTypeType::Function,
             DataType::Return(inner) => inner.get_type(),  // Get inner type
-            DataType::EndOfBlock => panic!("Cannot get type of eof"),
+            _ => panic!("Cannot get type of eof"),
         }
     }
     
