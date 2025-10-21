@@ -5,6 +5,7 @@ pub enum Expression {
     Atom(String),
     Operation(String, Vec<Expression>),
     Declaration(String),
+    Array(Vec<Expression>),
 
     // fn
     FunctionCall(String, Box<Vec<Expression>>),
@@ -12,7 +13,7 @@ pub enum Expression {
     Return(Box<Expression>),
     
     // conditionals
-    If(Box<Expression>, Box<Expression>, Option<Box<Expression>>), 
+    If(Box<Expression>, Box<Expression>, Vec<(Expression, Expression)>, Option<Box<Expression>>), 
     Block(Vec<Expression>),
     ForLoop(String, Box<Expression>, Box<Expression>, Option<Box<Expression>>, Box<Expression>),
     WhileLoop(Box<Expression>, Box<Expression>),  // (condition, body)
@@ -45,8 +46,18 @@ impl std::fmt::Display for Expression {
                 }
                 write!(f, ")")
             },
-            Expression::If(condition, then, _else_) => {
-                write!(f, "if {} then {} else {}", condition, then, "")
+            Expression::If(condition, then_body, elseif_branches, else_body) => {
+                write!(f, "if {} {{ {} }}", condition, then_body)?;
+                
+                for (elseif_cond, elseif_body) in elseif_branches {
+                    write!(f, " elseif {} {{ {} }}", elseif_cond, elseif_body)?;
+                }
+                
+                if let Some(else_expr) = else_body {
+                    write!(f, " else {{ {} }}", else_expr)?;
+                }
+                
+                Ok(())
             },
             Expression::Block(tree) => {
                 write!(f, "{{ ")?;
@@ -100,6 +111,10 @@ impl Expression {
 
     pub fn eval(&self, scopes: &mut ScopeStack) -> Result<DataType, LangError> {
         match self {
+            Expression::Array(elements) => {
+                let evaluated_elements = elements.iter().map(|expr| expr.eval(scopes)).collect::<Result<Vec<_>, _>>()?;
+                Ok(DataType::Array(evaluated_elements))
+            },
             Expression::Return(expr) => {
                 let evaluated = expr.eval(scopes);
                 match evaluated {
@@ -378,25 +393,45 @@ impl Expression {
                     Err(err) => return Err(err),
                 }
             },
-            Expression::If(condition, then_body, else_body) => {
+            Expression::If(condition, then_body, elseif_branches, else_body) => {
                 match condition.eval(scopes) {
-                    Ok(cond) => {
-                        let result = if cond.is_truthy() {
-                            then_body.eval(scopes)
-                        } else if let Some(else_expr) = else_body {
-                            else_expr.eval(scopes)
-                        } else {
-                            Ok(DataType::Float(0.0))
-                        };
-                        
-                        // Propagate return values
-                        match result {
-                            Ok(DataType::Return(value)) => {
-                                 return Ok(DataType::Return(value));
-                            },
-                            Ok(other) => return Ok(other),
-                            Err(err) => return Err(err),
+                    Ok(cond_val) => {
+                        if cond_val.is_truthy() {
+                            let result = then_body.eval(scopes)?;
+                            
+                            if matches!(result, DataType::Return(_) | DataType::Break | DataType::Continue) {
+                                return Ok(result);
+                            }
+
+                            return Ok(result);
                         }
+                        
+                        // Check elseif branches
+                        for (elseif_cond, elseif_body) in elseif_branches {
+                            let elseif_val = elseif_cond.eval(scopes)?;
+                            
+                            if elseif_val.is_truthy() {
+                                let result = elseif_body.eval(scopes)?;
+                                
+                                if matches!(result, DataType::Return(_) | DataType::Break | DataType::Continue) {
+                                    return Ok(result);
+                                }
+                                
+                                return Ok(result);
+                            }
+                        }
+                        
+                        if let Some(else_expr) = else_body {
+                            let result = else_expr.eval(scopes)?;
+                            
+                            if matches!(result, DataType::Return(_) | DataType::Break | DataType::Continue) {
+                                return Ok(result);
+                            }
+                            
+                            return Ok(result);
+                        }
+                        
+                        Ok(DataType::EndOfBlock)
                     },
                     Err(err) => return Err(err),
                 }

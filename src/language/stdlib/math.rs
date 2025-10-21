@@ -1,3 +1,5 @@
+use std::{ops::{Add, Mul}, time::{SystemTime, UNIX_EPOCH}};
+
 use crate::language::{datatypes::DataType, errors::LangError};
 
 fn fib_inner(p: f32) -> f32 {
@@ -22,4 +24,12 @@ pub fn fib(args: &[DataType]) -> Result<DataType, LangError> {
         }
         _ => Err(LangError::new(format!("Cannot calculate Fibonacci number for non-numeric type")))
     }
+}
+
+pub fn random(_: &[DataType]) -> Result<DataType, LangError> {
+    let rand_seed = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64;
+    let next_u64 = rand_seed.mul(8934589234578902345 as u64).add(39485904390230459 as u64);
+    let float_res = next_u64 as f32 / u64::MAX as f32;
+    
+    Ok(DataType::Float(float_res))
 }

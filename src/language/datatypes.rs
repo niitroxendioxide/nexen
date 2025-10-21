@@ -7,6 +7,7 @@ pub enum DataType {
     String(String),
     Function(Vec<String>, Expression),
     Return(Box<DataType>),
+    Array(Vec<DataType>),
     Continue,
     Break,
     EndOfBlock,
@@ -58,6 +59,7 @@ impl DataType {
             DataType::Float(val) => format!("{}", val),
             DataType::Bool(b) => format!("{}", b),
             DataType::Return(inner) => inner.as_string(),  // Unwrap for conversions
+            DataType::Array(elements) => format!("[{}]", elements.iter().map(|e| e.as_string()).collect::<Vec<String>>().join(", ")),
             _ => panic!("Cannot evaluate variable as string"),
         }
     }

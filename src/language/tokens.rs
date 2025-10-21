@@ -1,8 +1,9 @@
 use crate::language::binder::FunctionRegistry;
-use crate::language::errors::LangError;
+use crate::language::errors::{LangError};
 use crate::language::expressions::*;
 use crate::language::scopes::ScopeStack;
 use crate::language::stdlib;
+use crate::language::tokenizer::is_then_token;
 
 static LINE_END_TOKEN: &str = ";";
 
@@ -14,31 +15,35 @@ pub enum SplitTokenType {
     SplitToken,
     OperationToken,
     EndExpressionToken,
+    NewlineToken,
 }
 
 
 #[derive(Clone, PartialEq, Debug)]
 pub enum Token {
     // Arithmetic
-    OperationToken(String),
+    OperationToken(String, u32),
 
     // Program creation
-    LetToken(String), // variable declaration
+    LetToken(String, u32), // variable declaration
     MutableToken(String), // make variable mutable
-    IdentifierToken(String), // variable name
-    ScopeBeginToken(String), // {
-    ScopeEndToken(String), // }
+    IdentifierToken(String, u32), // variable name
+    ScopeBeginToken, // {
+    ScopeEndToken, // }
     OpenParenthesisToken(String), // (
     CloseParenthesisToken(String), // )
     EndExpressionToken(String), // ;
 
     // Types
     BoolToken(String),
-    NumericToken(String),
+    NumericToken(String, u32),
     StringToken(String),
+    ArrayBegin,
+    ArrayEnd,
 
     // Logic
     IfToken(String),
+    ElseIfToken(String),
     ElseToken(String),
     ReturnToken(String),
 
@@ -59,6 +64,7 @@ pub enum Token {
     LoopToken(String),
     BreakToken(String),
     ContinueToken(String),
+    ThenToken,
 
     // Functions
     FunctionToken(String),
@@ -82,6 +88,7 @@ pub struct SplitToken {
 }
 
 pub struct Program {
+    pub current_line: usize,
     pub source: String,
     pub tokens: Vec<Token>,
     pub scopes: ScopeStack,
@@ -91,19 +98,19 @@ pub struct Program {
 impl std::fmt::Display for Token {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Token::OperationToken(val) => write!(f, "\x1b[0;31mToken<\x1b[1;31mOperator, \'{}\'\x1b[0;31m>\x1b[0m", val),
-            Token::LetToken(val) => write!(f, "\x1b[0;32mToken\x1b[1;32m<Decl, {}>\x1b[0m", val),
-            Token::IdentifierToken(val) => write!(f, "\x1b[0;33mToken\x1b[1;33m<Identifier, \"{}\">\x1b[0m", val),
-            Token::NumericToken(val) => write!(f, "\x1b[0;33mToken\x1b[1;33m<Number, {}>\x1b[0m", val),
-            Token::EndExpressionToken(val) => write!(f, "\x1b[0;34mToken\x1b[1;34m<EndExpression, {}>\x1b[0m", val),
-            Token::ScopeBeginToken(val) => write!(f, "\x1b[0;35mToken\x1b[1;35m<ScopeBegin, {}>\x1b[0m", val),
-            Token::ScopeEndToken(val) => write!(f, "\x1b[0;35mToken\x1b[1;35m<ScopeEnd, {}>\x1b[0m", val),
+            Token::OperationToken(val, _) => write!(f, "\x1b[0;31mToken<\x1b[1;31mOperator, \'{}\'\x1b[0;31m>\x1b[0m", val),
+            Token::LetToken(val, _) => write!(f, "\x1b[0;32mToken\x1b[1;32m<Decl, {}>\x1b[0m", val),
+            Token::IdentifierToken(val, _) => write!(f, "\x1b[0;33mToken\x1b[1;33m<Identifier, \"{}\">\x1b[0m", val),
+            Token::NumericToken(val, _) => write!(f, "\x1b[0;33mToken\x1b[1;33m<Number, {}>\x1b[0m", val),
+            Token::EndExpressionToken(val) => write!(f, "\x1b[0;34mToken\x1b[1;34m<Next, {}>\x1b[0m", val),
+            Token::ScopeBeginToken => write!(f, "\x1b[0;35mToken\x1b[1;35m<ScopeBegin, {}>\x1b[0m", "{"),
+            Token::ScopeEndToken => write!(f, "\x1b[0;35mToken\x1b[1;35m<ScopeEnd, {}>\x1b[0m", "}"),
             Token::FunctionToken(val) => write!(f, "\x1b[0;31mToken\x1b[1;31m<DeclFunction, {}>\x1b[0m", val),
             Token::StringToken(val) => write!(f, "\x1b[0;32mToken\x1b[1;32m<String, {}>\x1b[0m", val),
             Token::ReturnToken(val) => write!(f, "\x1b[0;31mToken\x1b[1;31m<ReturnVal, {}>\x1b[0m", val),
 
 
-            t => write!(f, "{:?}", t),
+            t => write!(f, "Token<{:?}>", t),
         }
     }
 }
@@ -170,7 +177,7 @@ fn parse_function_call_with_program(call_str: &str) -> Result<(String, Vec<Expre
         let mut arg_expressions = Vec::new();
         for arg_str in arg_strings {
             let mut mini_program = Program::new();
-            mini_program.tokenize(arg_str.trim().to_string());
+            mini_program.tokenize(&arg_str.trim().to_string());
             let expr = mini_program.parse_expression(0.0)?;
             arg_expressions.push(expr);
         }
@@ -221,17 +228,18 @@ fn split_arguments(args_str: &str) -> Vec<String> {
 
 impl Token {
     pub fn is_declaration(&self) -> bool {
-        matches!(self, Token::LetToken(_))
+        matches!(self, Token::LetToken(_, _))
     }
 
     pub fn is_expression_end(&self) -> bool {
-        matches!(self, Token::EndExpressionToken(_) | Token::ScopeEndToken(_))
+        matches!(self, Token::EndExpressionToken(_) | Token::ScopeEndToken)
     }
 }
 
 impl Program {
     pub fn new() -> Self {
         Program {
+            current_line: 1,
             source: "".to_string(),
             tokens: vec![],
             scopes: ScopeStack::new(),
@@ -239,7 +247,7 @@ impl Program {
         }
     }
 
-    pub fn tokenize(&mut self, source: String) {
+    pub fn tokenize(&mut self, source: &String) {
         let tokens: Vec<SplitToken>  =  source
             .chars()
             .map(|token_char| match token_char {
@@ -345,7 +353,7 @@ impl Program {
         
         loop {
             match self.peek() {
-                Token::ScopeEndToken(_) | Token::EofToken => break,
+                Token::ScopeEndToken | Token::EofToken => break,
                 Token::EndExpressionToken(_) => {
                     self.next();
                     continue;
@@ -364,45 +372,114 @@ impl Program {
             Token::EndExpressionToken(_) => {
                 return self.parse_expression(min_bp);
             }
-            Token::LetToken(_) => {
+            Token::LetToken(_, cur_line) => {
+                self.current_line = cur_line as usize;
                 match self.next() {
-                    Token::IdentifierToken(var_name) => Expression::Declaration(var_name),
+                    Token::IdentifierToken(var_name, cur_line) => {
+                        self.current_line = cur_line as usize;
+                        Expression::Declaration(var_name)
+                    },
                     t => return Err(LangError::new(format!("Expected identifier after 'let', got: {:?}", t))),
                 }
             },
             Token::FunctionToken(_) => {
                 match self.next() {
-                    Token::IdentifierToken(fn_signature) => {
+                    Token::IdentifierToken(fn_signature, cur_line) => {
+                        self.current_line = cur_line as usize;
                         let (fn_name, params) = parse_function_signature(&fn_signature)?;
                         
-                        assert_eq!(self.next(), Token::ScopeBeginToken("{".to_string()));
+                        assert_eq!(self.next(), Token::ScopeBeginToken);
                         let body = self.parse_block();
-                        assert_eq!(self.next(), Token::ScopeEndToken("}".to_string()));
+                        assert_eq!(self.next(), Token::ScopeEndToken);
                         
                         Expression::FunctionDeclaration(fn_name, params, Box::new(body))
                     }
                     t => return Err(LangError::new(format!("Expected function signature after 'function', got: {:?}", t))),
                 }
             },
+            Token::ArrayBegin => {
+                let mut elements: Vec<Expression> = Vec::new();
+                loop {
+                    match self.peek() {
+                        Token::ArrayEnd => {
+                            self.next();
+                            break;
+                        },
+                        Token::IdentifierToken(tok, cur_line) if tok == "," => {
+                            self.current_line = cur_line as usize;
+                            self.next();
+                            continue;
+                        },
+                        Token::IdentifierToken(mut tok, cur_line) | Token::NumericToken(mut tok, cur_line) => {
+                            self.current_line = cur_line as usize;
+                            if tok.ends_with(",") {
+                                self.next();
+                                tok.remove(tok.len() - 1);
+                                elements.push(Expression::Atom(tok))
+                            } else {
+                                self.next();
+                                elements.push(Expression::Atom(tok))
+                            }
+                        },
+                        tok => return Err(
+                            LangError::new(format!("Invalid token between array declaration: {}", tok))
+                        )
+                    }
+                } 
+                
+                Expression::Array(elements)
+            }
             Token::IfToken(_) => {
-                let condition = self.parse_expression(0.0).unwrap();
+                let condition = self.parse_expression(0.0)?;
                 
-                assert_eq!(self.next(), Token::ScopeBeginToken("{".to_string()));
+                match self.next() {
+                    Token::ScopeBeginToken | Token::ThenToken => {}
+                    t => return Err(LangError::new(format!("Expected '{{' after 'if', got: {:?}", t))),
+                }
                 let then_body = self.parse_block();
-                assert_eq!(self.next(), Token::ScopeEndToken("}".to_string()));
+                if !matches!(self.next(), Token::ScopeEndToken | Token::ElseIfToken(_)) {
+                    return Err(
+                        LangError::new("Expected '}}' or 'else if' after 'if' block".to_string())
+                    )
+                }
+
+                let mut elseif_branches = Vec::new();
                 
-                let else_body = Option::Some(Box::new(Expression::Block(vec![])));
+                while matches!(self.peek(), Token::ElseIfToken(_)) {
+                    self.next();
+                    
+                    let elseif_condition = self.parse_expression(0.0)?;
+                    
+                    assert_eq!(true, is_then_token(&self.next()));
+                    let elseif_body = self.parse_block();
+                    assert_eq!(self.next(), Token::ScopeEndToken);
+                    
+                    elseif_branches.push((elseif_condition, elseif_body));
+                }
                 
-                Expression::If(Box::new(condition), Box::new(then_body), else_body)
+                let else_body = if matches!(self.peek(), Token::ElseToken(_)) {
+                    self.next();
+                    
+                    assert_eq!(true, is_then_token(&self.next()));
+                    let body = self.parse_block();
+                    assert_eq!(self.next(), Token::ScopeEndToken);
+                    
+                    Some(Box::new(body))
+                } else {
+                    None
+                };
+                
+                Expression::If(Box::new(condition), Box::new(then_body), elseif_branches, else_body)
             },
-            Token::ScopeBeginToken(_) => {
+            Token::ScopeBeginToken => {
                 let block = self.parse_block();
-                assert_eq!(self.next(), Token::ScopeEndToken("}".to_string()));
+                assert_eq!(self.next(), Token::ScopeEndToken);
                 block
             },
             Token::BoolToken(val) => Expression::Atom(val),
             Token::StringToken(val) => Expression::Atom(val),
-            Token::IdentifierToken(var_name) => {
+            Token::IdentifierToken(var_name, cur_line) => {
+                self.current_line = cur_line as usize;
                 if is_function_call(&var_name) {
                     let (fn_name, arg_expressions) = parse_function_call_with_program(&var_name)?;
                     Expression::FunctionCall(fn_name, Box::new(arg_expressions))
@@ -410,7 +487,10 @@ impl Program {
                     Expression::Atom(var_name)
                 }
             },
-            Token::NumericToken(var_name) => Expression::Atom(var_name),
+            Token::NumericToken(var_name, cur_line) => {
+                self.current_line = cur_line as usize;
+                Expression::Atom(var_name)
+            },
             Token::OpenParenthesisToken(_) => {
                 let last_expr = self.parse_expression(0.0);
                 assert_eq!(self.next(), Token::CloseParenthesisToken(")".to_string()));
@@ -425,31 +505,28 @@ impl Program {
             },
             
             Token::ForToken(_) => {
-                // Expect: for i = start, end [, step]
-                
-                // Parse variable name
                 let var_name = match self.next() {
-                    Token::IdentifierToken(name) => name,
+                    Token::IdentifierToken(name, cur_line) => {self.current_line = cur_line as usize; name},
                     t => return Err(LangError::new(format!("Expected variable name after 'for', got: {:?}", t))),
                 };
                 
                 match self.next() {
-                    Token::EqualToken(op) | Token::OperationToken(op) if op == "=" => {},
+                    Token::EqualToken(op) | Token::OperationToken(op, _) if op == "=" => {},
                     t => return Err(LangError::new(format!("Expected '=' after for variable, got: {:?}", t))),
                 }
                 
                 let start = self.parse_expression(0.0)?;
                 
                 match self.next() {
-                    Token::IdentifierToken(ref s) if s == "," => {},
-                    Token::OperationToken(ref s) if s == "," => {},
+                    Token::IdentifierToken(ref s, cur_line) if s == "," => {self.current_line = cur_line as usize},
+                    Token::OperationToken(ref s, _) if s == "," => {},
                     t => return Err(LangError::new(format!("Expected ',' after for start value, got: {:?}", t))),
                 }
                 
                 let end = self.parse_expression(0.0)?;
                 
                 let step = match self.peek() {
-                    Token::IdentifierToken(ref s) | Token::OperationToken(ref s) => {
+                    Token::IdentifierToken(ref s, _) | Token::OperationToken(ref s, _) => {
                         if s == "," {
                             None
                         } else {
@@ -461,13 +538,13 @@ impl Program {
                 };
                 
                 match self.next() {
-                    Token::ScopeBeginToken(_) => {},
+                    Token::ScopeBeginToken => {},
                     t => return Err(LangError::new(format!("Expected '{{' after for parameters, got: {:?}", t))),
                 }
                 
                 let body = self.parse_block();
                 match self.next() {
-                    Token::ScopeEndToken(_) => {},
+                    Token::ScopeEndToken => {},
                     t => return Err(LangError::new(format!("Expected '}}' after for body, got: {:?}", t))),
                 }
                 
@@ -476,13 +553,13 @@ impl Program {
             Token::WhileToken(_) => {
                 let condition = self.parse_expression(0.0)?;
                 match self.next() {
-                    Token::ScopeBeginToken(_) => {},
+                    Token::ScopeBeginToken => {},
                     t => return Err(LangError::new(format!("Expected '{{' after while condition, got: {:?}", t))),
                 }
                 
                 let body = self.parse_block();
                 match self.next() {
-                    Token::ScopeEndToken(_) => {},
+                    Token::ScopeEndToken => {},
                     t => return Err(LangError::new(format!("Expected '}}' after while body, got: {:?}", t))),
                 }
                 
@@ -491,13 +568,13 @@ impl Program {
             
             Token::LoopToken(_) => {
                 match self.next() {
-                    Token::ScopeBeginToken(_) => {},
+                    Token::ScopeBeginToken => {},
                     t => return Err(LangError::new(format!("Expected '{{' after loop, got: {:?}", t))),
                 }
                 
                 let body = self.parse_block();
                 match self.next() {
-                    Token::ScopeEndToken(_) => {},
+                    Token::ScopeEndToken => {},
                     t => return Err(LangError::new(format!("Expected '}}' after loop body, got: {:?}", t))),
                 }
                 
@@ -516,7 +593,7 @@ impl Program {
             let op = match self.peek() {
                 Token::EofToken | Token::EndExpressionToken(_) => break,
                 Token::CloseParenthesisToken(_) => break,
-                Token::OperationToken(opv) 
+                Token::OperationToken(opv, _) 
                 | Token::EqualToken(opv)
                 | Token::CompareToken(opv) => opv,
                 _ => break,

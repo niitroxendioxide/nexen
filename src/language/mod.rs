@@ -1,5 +1,7 @@
 use std::time::Instant;
 
+use crate::language::errors::ProgramError;
+
 pub mod tokens;
 pub mod datatypes;
 pub mod expressions;
@@ -10,26 +12,30 @@ pub mod stdlib;
 pub mod vm;
 pub mod tokenizer;
 
-pub fn interpret(source: String) -> Result<std::time::Duration, errors::LangError> {
+pub fn interpret(source: String) -> Result<std::time::Duration, errors::ProgramError> {
     let mut program = tokens::Program::new();
-    program.tokenize(source);
+    program.tokenize(&source);
 
     let program_time = Instant::now();
     match program.begin() {
-        Err(err) => return Err(err),
+        Err(err) => {
+            let code_at_line = source.lines().nth(program.current_line - 1).unwrap_or("");
+            
+            Err(ProgramError::new(err.message, program.current_line, code_at_line.to_string()))
+        }
         Ok(_) => return Ok(program_time.elapsed()),
     }
 }
 
 pub fn tokenize(source: String) -> Result<(), errors::LangError> {
     let mut program = tokens::Program::new();
-    program.tokenize(source);
+    program.tokenize(&source);
     println!("{}", program);
     Ok(())
 }
 
-pub fn bytecode_compile(source: String) -> Result<(), String> {
-    let vm = vm::vm::NxVirtualMachine::new();
+pub fn bytecode_compile(_source: String) -> Result<(), String> {
+    let _m = vm::vm::NxVirtualMachine::new();
     //vm.run(source)
     // 
     

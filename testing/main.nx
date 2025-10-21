@@ -1,8 +1,8 @@
-let a = 0;
-loop {
-    if a > 10 {
-        break;
-    }
-    println(a);
-    a = a + 1;
+let c = 15;
+function d(a) {
+    print(a)
 }
+
+d(c);
+
+print(t);

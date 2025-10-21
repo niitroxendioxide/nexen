@@ -54,7 +54,7 @@ fn main() {
                             println!("\r\x1b[1;32m[Nexen]\x1b[0m Program finished\n-> Execution time: \x1b[1;31m[{:?}]\x1b[0m", program_exec_time);
                         }
                     }
-                    Err(err) => println!("[Interpreter] when executing {}: \n\n> {}", file_path, err)
+                    Err(err) => println!("[Interpreter] when executing {}: \n\n{}", file_path, err)
                 }
             }
         } else {

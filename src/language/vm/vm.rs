@@ -1,4 +1,4 @@
-use crate::language::expressions::Expression;
+// use crate::language::expressions::Expression;
 use crate::language::tokens::*;
 use crate::utils::stack::Stack;
 
@@ -23,11 +23,11 @@ impl NxVirtualMachine {
         }
     }
     
-    fn execute() {
+    fn _execute() {
         
     }
     
-    fn current(&self) -> Option<&Value> {
+    fn _current(&self) -> Option<&Value> {
         self.stack.peek()
     }
 }
@@ -39,7 +39,7 @@ impl BytecodeBuilder {
         BytecodeBuilder {}
     }
     
-    fn emit_instruction(&self) {
+    fn _emit_instruction(&self) {
         
     }
     
@@ -47,7 +47,7 @@ impl BytecodeBuilder {
         vec![]
     }
     
-    pub fn generate(&self, tokens: Vec<&Token>) {
+    pub fn generate(&self, _tokens: Vec<&Token>) {
         
     }
 }
