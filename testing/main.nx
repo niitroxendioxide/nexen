@@ -1,9 +1,6 @@
-let c = 100_000;
-function d(a) {
-    local g = 0.99999;
-    for i = 0, a doal
-        g = g * rand();
-    end
-}
+local a = input()
+local num = tonumber(a)
 
-d(c);
+if (num > 5) {
+    print("i now listen to inputs!")
+}

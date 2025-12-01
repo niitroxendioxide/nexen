@@ -26,7 +26,12 @@ impl DataType {
         match self {
             DataType::Float(val) => *val,
             DataType::Bool(b) => if *b { 1.0 } else { 0.0 },
-            DataType::String(str) => str.parse::<f32>().unwrap_or(0.0),
+            DataType::String(str) => {
+                str.trim().parse::<f32>().unwrap_or_else(|er| {
+                    println!("Error parsing '{}': {}", str, er);
+                    0.0
+                })
+            }
             DataType::Return(inner) => inner.as_float(),  // Unwrap for conversions
             _ => panic!("Cannot convert variable to float"),
         }
